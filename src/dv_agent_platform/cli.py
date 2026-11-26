@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from .config import FrameworkConfig
+from .evaluation.harness import EvaluationHarness
+from .memory.store import MEMORY_KINDS, MemoryStore
 from .orchestrator.backends import GeminiCliBackend
 from .orchestrator.runner import Orchestrator
 from .orchestrator.state import StateStore
@@ -44,6 +46,40 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_status = sub.add_parser("status", help="Show persisted state of a workflow run")
     p_status.add_argument("run_id")
 
+    p_mem = sub.add_parser("memory", help="Search project-scoped verified DV memory entries")
+    p_mem.add_argument("--query", default="", help="Keyword query across titles, content, and tags")
+    p_mem.add_argument(
+        "--kind",
+        action="append",
+        choices=sorted(MEMORY_KINDS),
+        default=None,
+        help="Optional memory tier filter (repeatable)",
+    )
+    p_mem.add_argument(
+        "--include-unconfirmed",
+        action="store_true",
+        help="Include candidate/verified entries in addition to human-confirmed entries",
+    )
+    p_mem.add_argument("--limit", type=int, default=5, help="Maximum entries to return")
+
+    p_eval = sub.add_parser("evaluate", help="Inspect or run the DV golden benchmark dataset")
+    p_eval.add_argument(
+        "--dataset",
+        default="evaluation/golden/dv_golden_cases.json",
+        help="Path to golden benchmark JSON (relative to project root or absolute)",
+    )
+    p_eval.add_argument(
+        "--case",
+        action="append",
+        default=None,
+        help="Optional case_id filter (repeatable)",
+    )
+    p_eval.add_argument(
+        "--execute",
+        action="store_true",
+        help="Execute cases against Gemini CLI in read-only plan mode (defaults to dry-run dataset preview)",
+    )
+
     args = parser.parse_args(argv)
     root = Path(args.project_root).resolve() if args.project_root else None
 
@@ -60,6 +96,72 @@ def main(argv: Optional[List[str]] = None) -> int:
         cfg = FrameworkConfig.load(project_root=root)
         print(json.dumps(StateStore(cfg.runs_dir).load(args.run_id), indent=2, ensure_ascii=False))
         return 0
+
+    if args.cmd == "memory":
+        cfg = FrameworkConfig.load(project_root=root)
+        if not cfg.memory_db.is_file():
+            print(json.dumps({
+                "project_id": cfg.project_id,
+                "query": args.query,
+                "only_confirmed": not args.include_unconfirmed,
+                "count": 0,
+                "entries": [],
+                "note": "No project memory database initialized yet.",
+            }, indent=2, ensure_ascii=False))
+            return 0
+        store = MemoryStore(cfg.memory_db, cfg.project_root)
+        entries = store.retrieve(
+            project_id=cfg.project_id,
+            query=args.query,
+            kinds=args.kind,
+            only_confirmed=not args.include_unconfirmed,
+            limit=args.limit,
+        )
+        for item in entries:
+            item["stale"] = store.check_staleness(item["entry_id"], project_id=cfg.project_id)
+        print(json.dumps({
+            "project_id": cfg.project_id,
+            "query": args.query,
+            "only_confirmed": not args.include_unconfirmed,
+            "count": len(entries),
+            "entries": entries,
+        }, indent=2, ensure_ascii=False))
+        return 0
+
+    if args.cmd == "evaluate":
+        cfg = FrameworkConfig.load(project_root=root)
+        ds_path = Path(args.dataset)
+        if not ds_path.is_absolute():
+            ds_path = cfg.project_root / ds_path
+        cases = EvaluationHarness.load_golden_dataset(ds_path)
+        if args.case:
+            allowed = set(args.case)
+            cases = [c for c in cases if c.case_id in allowed]
+        if not args.execute:
+            print(json.dumps({
+                "mode": "dry_run_preview",
+                "dataset": str(ds_path),
+                "total_cases": len(cases),
+                "cases": [
+                    {
+                        "case_id": c.case_id,
+                        "workflow": c.workflow,
+                        "expected_decision": c.expected_decision,
+                        "expected_sources": c.expected_sources,
+                        "expect_security_alert": c.expect_security_alert,
+                        "description": c.description,
+                    }
+                    for c in cases
+                ],
+            }, indent=2, ensure_ascii=False))
+            return 0
+        harness = EvaluationHarness(
+            cfg,
+            backend_factory=lambda _case: GeminiCliBackend(cwd=str(cfg.project_root), approval_mode="plan"),
+        )
+        report = harness.evaluate(cases)
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0 if report["passed_cases"] == report["total_cases"] else 1
 
     if args.cmd == "run":
         params = _parse_kv(args.param)

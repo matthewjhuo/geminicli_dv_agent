@@ -70,7 +70,10 @@ class TestLevel3Teamwork(unittest.TestCase):
         shutil.rmtree(self._tmp, ignore_errors=True)
 
     def test_01_slash_commands_toml_valid_and_safe(self) -> None:
-        expected = {"triage", "plan", "coverage", "formal", "rtl-trace", "ral-audit", "review"}
+        expected = {
+            "testplan", "debug", "review", "team", "coverage", "memory", "evaluate",
+            "triage", "plan", "formal", "rtl-trace", "ral-audit",
+        }
         found = {p.stem for p in COMMANDS_DIR.glob("*.toml")}
         self.assertEqual(found, expected)
         for p in COMMANDS_DIR.glob("*.toml"):

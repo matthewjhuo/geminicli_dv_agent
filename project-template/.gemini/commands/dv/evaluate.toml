@@ -1,0 +1,12 @@
+description = "Run the DV Agent Benchmark evaluation suite (golden cases + accuracy, evidence correctness, token cost, latency, or Harness^2 recursion check)."
+prompt = """
+Prepare and execute the Level-5 DV Agent Benchmark evaluation workflow (read-only dry-run preview by default; require explicit human approval before invoking live LLM API runs):
+
+Benchmark scope / options (golden dataset, case IDs, or Harness^2 mode): {{args}}
+
+Procedure:
+1. Inspect `evaluation/golden/dv_golden_cases.json` (or the specified dataset path) and summarize the selected golden DV cases and target workflows.
+2. Run a safe read-only preview first via `PYTHONPATH=$DV_AGENT_PLATFORM_PYTHONPATH python3 -m dv_agent_platform evaluate` (or for Harness^2 offline recursion validation: `python3 scripts/run_harness2_dv.py --mode dry_sim --k 1`).
+3. If live Gemini CLI benchmark execution (`--execute` or `--mode gemini_cli`) is requested, present the exact command, estimated token budget, and request explicit human confirmation (`[APPROVAL REQUIRED]`) before running.
+4. Report the four primary engineering metrics (`accuracy`, `evidence_correctness`, `cost_usd`, `execution_time_s`) plus any `security_alert_check` results in Traditional Chinese (zh-TW).
+"""

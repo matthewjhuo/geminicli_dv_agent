@@ -42,7 +42,7 @@ dv-agent-framework/
 │       ├── settings.json          # [L4] Hooks 與 6 個 DV MCP 伺服器註冊
 │       ├── skills/                # [L1] 8 個標準化 DV Agent Skills + references/
 │       ├── agents/                # [L2] 9 個專業子代理（dv-spec .. dv-review）
-│       ├── commands/dv/           # [L3] 7 個自訂斜線命令（/dv:*）
+│       ├── commands/dv/           # [L3] 12 個自訂斜線命令（/dv:testplan, /dv:debug, /dv:review, /dv:team, /dv:coverage, /dv:memory, /dv:evaluate 等）
 │       ├── policies/              # [L4] 唯讀預設、核准閘門與永久禁止 TOML 規則
 │       ├── hooks/                 # [L4] before_tool_guard.py 與 after_tool_audit.py
 │       └── dv/contracts/          # [L2-L3] 子代理結構化輸出 JSON Schema
@@ -67,12 +67,22 @@ dv-agent-framework/
    PYTHONPATH=src python3 -m unittest discover -s tests -p "test_*.py" -v
    ```
 3. **在 Gemini CLI 互動模式中使用 DV 技能、子代理與斜線命令**：
-   - 斜線命令：`/dv:triage sim_out/fifo_stress_1042/simv.log`、`/dv:plan docs/specs/fifo_mas.md`、`/dv:coverage`、`/dv:formal`、`/dv:ral-audit`、`/dv:review`
+   - **核心標準斜線命令**：
+     - `/dv:testplan` — 自動產生 Verification Plan（亦可相容使用 `/dv:plan`）
+     - `/dv:debug` — 分析 Simulation Failure 與根因定位（亦可相容使用 `/dv:triage`）
+     - `/dv:review` — 獨立審查 RTL、UVM、SVA 與報告證據
+     - `/dv:team` — 啟動 Multi-Agent Teamwork（DAG 分工 + 獨立審查）
+     - `/dv:coverage` — 進行 Coverage Gap Analysis 與 Waiver 治理
+     - `/dv:memory` — 搜尋已驗證的專案歷史 DV 知識
+     - `/dv:evaluate` — 執行 Agent Benchmark 與四維指標評測
+     - 專項延伸命令：`/dv:formal`、`/dv:rtl-trace`、`/dv:ral-audit`
    - 指定子代理：`@dv-debug`、`@dv-rtl`、`@dv-uvm`、`@dv-sva`、`@dv-coverage`、`@dv-formal`、`@dv-spec`、`@dv-architect`、`@dv-review`
-4. **使用選配的 Python 編排器（預設 Dry-Run）**：
+4. **使用選配的 Python 編排器、記憶檢索與評測 CLI（預設 Dry-Run）**：
    ```bash
    PYTHONPATH=src python3 -m dv_agent_platform workflows
    PYTHONPATH=src python3 -m dv_agent_platform run triage -P log_path=fixtures/logs/simv_fail_seed1042.log -P test=axi_fifo_soft_clr_stress_test
+   PYTHONPATH=src python3 -m dv_agent_platform memory --query "soft_clr"
+   PYTHONPATH=src python3 -m dv_agent_platform evaluate
    ```
 5. **（選配）透過 Harness² 進行遞迴 Harness 演化與優化**：
    ```bash
