@@ -1,0 +1,229 @@
+"""Factory registering the 6 DV MCP server profiles (dv-vcs, dv-verdi, dv-p4,
+dv-regression, dv-ado, dv-jira) backed by mock-first adapters and approval gates.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from ..adapters import ADOAdapter, JIRAAdapter, PerforceAdapter, RegressionAdapter, VCSAdapter, VerdiAdapter
+from ..config import FrameworkConfig
+from ..security.approval import ApprovalGate, approver_from_env
+from ..telemetry.logger import StructuredLogger
+from .protocol import MCPServer, ToolSpec
+
+SERVER_PROFILES = ("dv-vcs", "dv-verdi", "dv-p4", "dv-regression", "dv-ado", "dv-jira")
+
+
+def create_dv_mcp_server(
+    profile: str,
+    config: FrameworkConfig,
+    approval_gate: Optional[ApprovalGate] = None,
+    fence_outputs: bool = True,
+) -> MCPServer:
+    if profile not in SERVER_PROFILES:
+        raise ValueError(f"Unknown MCP server profile {profile!r}. Expected one of {SERVER_PROFILES}")
+    logger = StructuredLogger(config.logs_dir / "mcp.jsonl", component=f"mcp.{profile}")
+    gate = approval_gate or ApprovalGate(approver=approver_from_env(), logger=logger.child("approval"))
+    srv = MCPServer(name=profile, fence_outputs=fence_outputs, logger=logger)
+
+    if profile == "dv-vcs":
+        vcs = VCSAdapter(config, approval_gate=gate, logger=logger.child("vcs"))
+        srv.register(ToolSpec(
+            name="parse_log",
+            description="Read-only bounded extraction of first failure and error signatures from a VCS simulation log.",
+            input_schema={
+                "type": "object",
+                "required": ["log_path"],
+                "properties": {
+                    "log_path": {"type": "string"},
+                    "context_lines": {"type": "integer", "default": 5},
+                },
+            },
+            handler=lambda a: vcs.parse_log(a["log_path"], int(a.get("context_lines", 5))),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="run_simulation",
+            description="Approval-gated VCS single-seed simulation launch (dry-run by default unless approved).",
+            input_schema={
+                "type": "object",
+                "required": ["test"],
+                "properties": {
+                    "test": {"type": "string"},
+                    "seed": {"type": "integer", "default": 1},
+                    "dump_fsdb": {"type": "boolean", "default": False},
+                    "dry_run": {"type": "boolean"},
+                    "approval_id": {"type": "string"},
+                },
+            },
+            handler=lambda a: vcs.run_simulation(
+                a["test"], a.get("seed", 1), a.get("dump_fsdb", False), a.get("dry_run"), a.get("approval_id")
+            ),
+            read_only=False,
+        ))
+
+    elif profile == "dv-verdi":
+        verdi = VerdiAdapter(config, approval_gate=gate, logger=logger.child("verdi"))
+        srv.register(ToolSpec(
+            name="suggest_window",
+            description="Read-only Verdi waveform signal & time-window query recommendation.",
+            input_schema={
+                "type": "object",
+                "required": ["hierarchy", "center_time_ns"],
+                "properties": {"hierarchy": {"type": "string"}, "center_time_ns": {"type": "integer"}},
+            },
+            handler=lambda a: verdi.suggest_window(a["hierarchy"], int(a["center_time_ns"])),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="extract_fsdb_slice",
+            description="Approval-gated Verdi batch FSDB waveform slice extraction.",
+            input_schema={
+                "type": "object",
+                "required": ["fsdb_path", "signals", "start_ns", "end_ns"],
+                "properties": {
+                    "fsdb_path": {"type": "string"},
+                    "signals": {"type": "array", "items": {"type": "string"}},
+                    "start_ns": {"type": "integer"},
+                    "end_ns": {"type": "integer"},
+                    "dry_run": {"type": "boolean"},
+                    "approval_id": {"type": "string"},
+                },
+            },
+            handler=lambda a: verdi.extract_fsdb_slice(
+                a["fsdb_path"], a["signals"], int(a["start_ns"]), int(a["end_ns"]), a.get("dry_run"), a.get("approval_id")
+            ),
+            read_only=False,
+        ))
+
+    elif profile == "dv-p4":
+        p4 = PerforceAdapter(config, approval_gate=gate, logger=logger.child("p4"))
+        srv.register(ToolSpec(
+            name="status",
+            description="Read-only Perforce workspace opened-file status.",
+            input_schema={"type": "object", "properties": {}},
+            handler=lambda _: p4.status(),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="changes",
+            description="Read-only recent Perforce changelists.",
+            input_schema={
+                "type": "object",
+                "properties": {"path_pattern": {"type": "string", "default": "//..."}, "max_count": {"type": "integer", "default": 10}},
+            },
+            handler=lambda a: p4.changes(a.get("path_pattern", "//..."), int(a.get("max_count", 10))),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="describe",
+            description="Read-only Perforce changelist summary.",
+            input_schema={"type": "object", "required": ["changelist"], "properties": {"changelist": {"type": "integer"}}},
+            handler=lambda a: p4.describe(int(a["changelist"])),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="prepare_edit",
+            description="Approval-gated Perforce changelist preparation (NEVER submits; human submits manually).",
+            input_schema={
+                "type": "object",
+                "required": ["files", "description"],
+                "properties": {
+                    "files": {"type": "array", "items": {"type": "string"}},
+                    "description": {"type": "string"},
+                    "dry_run": {"type": "boolean"},
+                    "approval_id": {"type": "string"},
+                },
+            },
+            handler=lambda a: p4.prepare_edit(a["files"], a["description"], a.get("dry_run"), a.get("approval_id")),
+            read_only=False,
+        ))
+
+    elif profile == "dv-regression":
+        regr = RegressionAdapter(config, approval_gate=gate, logger=logger.child("regression"))
+        srv.register(ToolSpec(
+            name="cluster_failures",
+            description="Read-only normalized failure signature clustering across regression seeds.",
+            input_schema={"type": "object", "properties": {"run_id": {"type": "string", "default": "latest"}}},
+            handler=lambda a: regr.cluster_failures(a.get("run_id", "latest")),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="coverage_summary",
+            description="Read-only URG coverage dashboard parser.",
+            input_schema={"type": "object", "properties": {"report_path": {"type": "string"}}},
+            handler=lambda a: regr.coverage_summary(a.get("report_path", "fixtures/coverage/urg_dashboard.txt")),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="launch",
+            description="Approval-gated regression suite launch.",
+            input_schema={
+                "type": "object",
+                "required": ["suite"],
+                "properties": {
+                    "suite": {"type": "string"},
+                    "seeds": {"type": "integer", "default": 10},
+                    "dry_run": {"type": "boolean"},
+                    "approval_id": {"type": "string"},
+                },
+            },
+            handler=lambda a: regr.launch(a["suite"], int(a.get("seeds", 10)), a.get("dry_run"), a.get("approval_id")),
+            read_only=False,
+        ))
+
+    elif profile == "dv-ado":
+        ado = ADOAdapter(config, approval_gate=gate, logger=logger.child("ado"))
+        srv.register(ToolSpec(
+            name="get_work_item",
+            description="Read-only Azure DevOps requirement/work-item lookup.",
+            input_schema={"type": "object", "required": ["item_id"], "properties": {"item_id": {"type": "string"}}},
+            handler=lambda a: ado.get_work_item(a["item_id"]),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="search_requirements",
+            description="Read-only Azure DevOps requirement search.",
+            input_schema={"type": "object", "properties": {"query": {"type": "string", "default": ""}}},
+            handler=lambda a: ado.search_requirements(a.get("query", "")),
+            read_only=True,
+        ))
+
+    elif profile == "dv-jira":
+        jira = JIRAAdapter(config, approval_gate=gate, logger=logger.child("jira"))
+        srv.register(ToolSpec(
+            name="get_issue",
+            description="Read-only JIRA defect/issue lookup.",
+            input_schema={"type": "object", "required": ["key"], "properties": {"key": {"type": "string"}}},
+            handler=lambda a: jira.get_issue(a["key"]),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="search_issues",
+            description="Read-only JIRA issue search.",
+            input_schema={"type": "object", "properties": {"query": {"type": "string", "default": ""}}},
+            handler=lambda a: jira.search_issues(a.get("query", "")),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="file_defect",
+            description="Approval- and confidentiality-gated JIRA defect creation.",
+            input_schema={
+                "type": "object",
+                "required": ["project_key", "summary", "description"],
+                "properties": {
+                    "project_key": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "description": {"type": "string"},
+                    "dry_run": {"type": "boolean"},
+                    "approval_id": {"type": "string"},
+                },
+            },
+            handler=lambda a: jira.file_defect(
+                a["project_key"], a["summary"], a["description"], True, a.get("dry_run"), a.get("approval_id")
+            ),
+            read_only=False,
+        ))
+
+    return srv

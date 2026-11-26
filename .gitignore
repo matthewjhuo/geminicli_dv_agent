@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+
+# OS & Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# EDA / Simulation / Formal / Agent runtime outputs
+sim_out/
+runs/
+.dv_agent/
+csrc/
+simv
+simv.daidir/
+*.fsdb
+*.vdb/
+*.vcd
+ucli.key
+vc_hdrs.h
+*.log
+urgReport/

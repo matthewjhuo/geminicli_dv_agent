@@ -1,0 +1,12 @@
+Design Hierarchy Coverage Summary (URG Fake/Synthetic Fixture)
+Total Score: 86.40%
+  Line:      94.20%
+  Cond:      81.00%
+  Toggle:    88.40%
+  FSM:       100.00%
+  Functional Groups: 82.00%
+
+Uncovered Items:
+1. [FuncCov] cg_axi_fifo.cp_full_x_soft_clr bin <full_during_clr> : 0 / 10 hits (verif/cov/axi_fifo_cov.sv:44)
+2. [Cond]    tb_top.u_dut (err_status_w1c == 4'hf)               : 0 / 1 hits  (fixtures/rtl/axi_fifo.sv:36)
+3. [Branch]  tb_top.u_dut.u_ctrl default_unreachable_state        : 0 / 1 hits  (structural tie-off candidate)

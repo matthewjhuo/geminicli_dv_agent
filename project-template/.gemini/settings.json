@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/google-gemini/gemini-cli/main/schemas/settings.schema.json",
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command|write_file|replace",
+        "hooks": [
+          {
+            "name": "dv-before-tool-guard",
+            "type": "command",
+            "command": "python3 $GEMINI_PROJECT_DIR/.gemini/hooks/before_tool_guard.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "name": "dv-after-tool-audit",
+            "type": "command",
+            "command": "python3 $GEMINI_PROJECT_DIR/.gemini/hooks/after_tool_audit.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  },
+  "mcpServers": {
+    "dv-vcs": {
+      "command": "python3",
+      "args": ["-m", "dv_agent_platform.mcp_servers", "dv-vcs"],
+      "env": {
+        "PYTHONPATH": "$DV_AGENT_PLATFORM_PYTHONPATH",
+        "DV_ADAPTER_MODE": "mock"
+      }
+    },
+    "dv-verdi": {
+      "command": "python3",
+      "args": ["-m", "dv_agent_platform.mcp_servers", "dv-verdi"],
+      "env": {
+        "PYTHONPATH": "$DV_AGENT_PLATFORM_PYTHONPATH",
+        "DV_ADAPTER_MODE": "mock"
+      }
+    },
+    "dv-p4": {
+      "command": "python3",
+      "args": ["-m", "dv_agent_platform.mcp_servers", "dv-p4"],
+      "env": {
+        "PYTHONPATH": "$DV_AGENT_PLATFORM_PYTHONPATH",
+        "DV_ADAPTER_MODE": "mock"
+      }
+    },
+    "dv-regression": {
+      "command": "python3",
+      "args": ["-m", "dv_agent_platform.mcp_servers", "dv-regression"],
+      "env": {
+        "PYTHONPATH": "$DV_AGENT_PLATFORM_PYTHONPATH",
+        "DV_ADAPTER_MODE": "mock"
+      }
+    },
+    "dv-ado": {
+      "command": "python3",
+      "args": ["-m", "dv_agent_platform.mcp_servers", "dv-ado"],
+      "env": {
+        "PYTHONPATH": "$DV_AGENT_PLATFORM_PYTHONPATH",
+        "DV_ADAPTER_MODE": "mock"
+      }
+    },
+    "dv-jira": {
+      "command": "python3",
+      "args": ["-m", "dv_agent_platform.mcp_servers", "dv-jira"],
+      "env": {
+        "PYTHONPATH": "$DV_AGENT_PLATFORM_PYTHONPATH",
+        "DV_ADAPTER_MODE": "mock"
+      }
+    }
+  }
+}

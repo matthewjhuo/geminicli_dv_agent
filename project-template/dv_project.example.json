@@ -1,0 +1,24 @@
+{
+  "_comment": "Copy to <project_root>/dv_project.json to customize. Never embed credentials.",
+  "project_id": "example_soc_ip",
+  "max_concurrency": 2,
+  "token_budget": 200000,
+  "task_timeout_s": 600,
+  "max_retries": 1,
+  "max_review_rounds": 2,
+  "dry_run": true,
+  "adapter_mode": "mock",
+  "adapters_validated": {
+    "vcs": false,
+    "verdi": false,
+    "perforce": false,
+    "regression": false,
+    "ado": false,
+    "jira": false
+  },
+  "allow_external_upload": false,
+  "pricing": {
+    "input_per_1m_usd": 1.25,
+    "output_per_1m_usd": 5.0
+  }
+}

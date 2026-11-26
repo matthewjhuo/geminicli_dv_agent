@@ -1,0 +1,31 @@
+# Gemini CLI v0.68+ Policy Engine Rules — Tier: Permanent Safety & Perforce Prohibitions
+# For un-overridable enterprise deployment on Linux, deploy this file via --admin-policy or /etc/gemini-cli/policies/.
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = [
+  "p4 submit",
+  "p4 push",
+  "p4 obliterate",
+  "p4 revert",
+  "p4 unshelve",
+  "p4 shelve -d",
+  "git push",
+  "git reset --hard",
+  "rm -rf",
+  "sudo",
+  "curl",
+  "wget",
+  "scp",
+  "rsync"
+]
+decision = "deny"
+priority = 999
+denyMessage = "Blocked by DV Security Policy: automated Perforce submit/revert, destructive commands, and unauthorized external transfers are strictly forbidden."
+
+[[rule]]
+toolName = ["write_file", "replace"]
+subagent = "dv-rtl"
+decision = "deny"
+priority = 990
+denyMessage = "dv-rtl is strictly read-only and may never modify RTL or testbench files."

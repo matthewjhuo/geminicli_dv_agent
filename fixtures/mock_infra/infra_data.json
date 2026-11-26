@@ -1,0 +1,78 @@
+{
+  "perforce": {
+    "client": "dv_ws_generic",
+    "opened": [],
+    "changes": [
+      {
+        "cl": 48210,
+        "author": "rtl_designer",
+        "summary": "Add synchronous soft_clr pointer reset to axi_fifo",
+        "files": ["fixtures/rtl/axi_fifo.sv#4"]
+      },
+      {
+        "cl": 48195,
+        "author": "dv_engineer",
+        "summary": "Add AST_HOLD_ON_STALL non-intrusive bind checker",
+        "files": ["fixtures/verif/axi_fifo_sva.sv#2"]
+      }
+    ]
+  },
+  "verdi": {
+    "hierarchy_signals": {
+      "tb_top.u_dut": [
+        "tb_top.u_dut.clk",
+        "tb_top.u_dut.rst_n",
+        "tb_top.u_dut.soft_clr",
+        "tb_top.u_dut.m_valid",
+        "tb_top.u_dut.m_ready",
+        "tb_top.u_dut.m_data"
+      ]
+    },
+    "waveform_samples": [
+      {"time_ns": 1250, "soft_clr": 1, "m_valid": 1, "m_ready": 0, "m_data": "0xdeadbeef"},
+      {"time_ns": 1260, "soft_clr": 0, "m_valid": 0, "m_ready": 0, "m_data": "0x00000000"}
+    ]
+  },
+  "regression": {
+    "failures": [
+      {
+        "test": "axi_fifo_soft_clr_stress_test",
+        "seed": 1042,
+        "raw_error": "AST_HOLD_ON_STALL failed at 1260 ns: m_valid dropped while stalled (0xdeadbeef)"
+      },
+      {
+        "test": "axi_fifo_soft_clr_stress_test",
+        "seed": 2089,
+        "raw_error": "AST_HOLD_ON_STALL failed at 3410 ns: m_valid dropped while stalled (0xcafebabe)"
+      },
+      {
+        "test": "axi_fifo_csr_race_test",
+        "seed": 77,
+        "raw_error": "UVM_ERROR @ 890 ns: [RAL_W1C] Simultaneous HW set lost on err_status_w1c (0x00000001)"
+      }
+    ]
+  },
+  "ado": {
+    "work_items": {
+      "REQ-FIFO-001": {
+        "id": "REQ-FIFO-001",
+        "title": "AXI-Stream Egress Handshake Stability Under Backpressure",
+        "state": "Approved"
+      },
+      "REQ-FIFO-002": {
+        "id": "REQ-FIFO-002",
+        "title": "Soft Clear Stall Deferral Behavior",
+        "state": "Approved"
+      }
+    }
+  },
+  "jira": {
+    "issues": {
+      "DVBUG-104": {
+        "key": "DVBUG-104",
+        "summary": "axi_fifo drops m_valid when soft_clr asserts during backpressure",
+        "status": "Open"
+      }
+    }
+  }
+}

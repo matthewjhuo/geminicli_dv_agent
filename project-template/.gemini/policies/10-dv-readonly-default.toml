@@ -1,0 +1,24 @@
+# Gemini CLI v0.68+ Policy Engine Rules — Tier: Read-Only Inspection Allowed by Default
+# Priority range in Gemini CLI PolicyRuleSchema MUST be integer 0..999.
+
+[[rule]]
+toolName = ["read_file", "list_directory", "glob", "grep_search"]
+decision = "allow"
+priority = 100
+
+[[rule]]
+toolName = [
+  "mcp_dv-vcs_parse_log",
+  "mcp_dv-verdi_suggest_window",
+  "mcp_dv-p4_status",
+  "mcp_dv-p4_changes",
+  "mcp_dv-p4_describe",
+  "mcp_dv-regression_cluster_failures",
+  "mcp_dv-regression_coverage_summary",
+  "mcp_dv-ado_get_work_item",
+  "mcp_dv-ado_search_requirements",
+  "mcp_dv-jira_get_issue",
+  "mcp_dv-jira_search_issues"
+]
+decision = "allow"
+priority = 150

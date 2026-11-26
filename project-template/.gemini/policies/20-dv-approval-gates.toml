@@ -1,0 +1,18 @@
+# Gemini CLI v0.68+ Policy Engine Rules — Tier: Explicit Human Approval Gates
+# Require interactive confirmation for source edits, shell commands, simulations, and ticket writes.
+
+[[rule]]
+toolName = ["write_file", "replace", "run_shell_command"]
+decision = "ask_user"
+priority = 500
+
+[[rule]]
+toolName = [
+  "mcp_dv-vcs_run_simulation",
+  "mcp_dv-verdi_extract_fsdb_slice",
+  "mcp_dv-p4_prepare_edit",
+  "mcp_dv-regression_launch",
+  "mcp_dv-jira_file_defect"
+]
+decision = "ask_user"
+priority = 550
