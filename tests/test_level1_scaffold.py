@@ -126,12 +126,13 @@ class TestLevel1StandardizedDVAssistant(unittest.TestCase):
         for path in STAGING_ROOT.rglob("*"):
             if (
                 not path.is_file()
-                or path.suffix == ".pyc"
+                or path.suffix.lower() in {".pyc", ".pdf"}
                 or "__pycache__" in path.parts
                 or ".git" in path.parts
                 or ".venv" in path.parts
                 or ".dv_agent" in path.parts
                 or "runs" in path.parts
+                or "papers" in path.parts
             ):
                 continue
             if path.resolve() == Path(__file__).resolve():

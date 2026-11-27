@@ -27,3 +27,7 @@ vc_hdrs.h
 *.log
 !fixtures/logs/*.log
 urgReport/
+
+# Local reference papers
+papers/
+*.pdf
