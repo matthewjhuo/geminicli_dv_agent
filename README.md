@@ -100,6 +100,7 @@ dv-agent-framework/
    > 每次 candidate 執行前會檢查安全標記、核心 skills 與新增規則的 `[iff]` scope；評分使用兩層檢查。`evaluate_candidate_promotion()`、paired regret 與 Wiki ledger 是本專案的選配 API，尚未替換外部 Harness² scheduler 的採用決策。Wiki 是一般本地檔案，沒有 OS 層不可竄改或不可回滾保證。這些演算法為本地實作，不宣稱等同外部論文或產品。
 
 進階部署與調校請參閱：
+- [公司 server Gemini CLI 英文 prompts：從零建立框架 → 接入既有 TB](./docs/prompts/README.md)
 - [本次正確性修正、相容性變更與剩餘限制](./docs/CORRECTNESS_REMEDIATION.md)
 - [執行完整性、續跑與預算邊界](./docs/EXECUTION_INTEGRITY.md)
 - [公司 TB 整合、離線部署與已知限制](./docs/COMPANY_TB_INTEGRATION.md)
