@@ -1,0 +1,9 @@
+{
+  "commit": "7ff121314724a0aca3cbb4aa1c35f73b0e1624f0",
+  "files": 183,
+  "base64_characters": 510320,
+  "parts": 11,
+  "sha256": "032724103ecce0b64a45db5bcc6793f392e5223054e23905fd873d5bc454b937",
+  "compressed_bytes": 382740,
+  "harness2_source": "Bundled local source snapshot; Apache-2.0; exact file digests in restored TRANSFER_MANIFEST.json"
+}

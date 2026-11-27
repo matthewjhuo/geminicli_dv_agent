@@ -1,0 +1,44 @@
+完整 Agentic DV Framework：複製貼上部署包（7ff1213）
+
+版本：main 的 7ff121314724a0aca3cbb4aa1c35f73b0e1624f0。
+183 個原始檔案，包含完整框架（含 BTTF 波形 SQLite、ChipMEM 雙層記憶、GUARD+WikiSkill 演化護欄、Survey Mutation Oracle 評測階梯）與本機 Harness² 核心原始碼快照及 Apache-2.0 授權。
+不包含 Gemini CLI 可執行檔、EDA 軟體、license 或任何憑證。
+公司已可使用 Gemini CLI；整套含 Harness² 建議用 Python 3.12 或 3.13。
+核心框架與完整測試需 Python 3.11+，Harness² 宣告支援 >=3.12,<3.14。
+Harness² bridge/render 額外選配依賴不在此包，預設 DV dry_sim 不需要 pip。
+
+方法 A：一次貼完整檔案，適合 VS Code Remote SSH 編輯器
+
+1. 在本機開啟 ALL_IN_ONE.sh，Ctrl+A、Ctrl+C。
+2. 在公司 server 的 VS Code 工作區以外建立暫存檔 dv_restore.sh。
+3. 把全部文字貼入該檔案並儲存，檔案編碼 UTF-8、換行 LF。
+4. 在 server terminal 執行：bash dv_restore.sh
+5. 成功應顯示 RESTORE OK: 183 files verified。
+
+注意：貼的是檔案內容，不是把本機檔案傳上 server；不需 server 連網。
+只需在 server 儲存一個文字檔，還原腳本會生成所有資料夾與檔案。
+若剪貼簿/遠端平台有文字長度限制，使用下面的分段方式。
+
+方法 B：分 11 段貼入同一個 Bash terminal
+
+1. 若目前是 csh/tcsh，先執行 bash，後續都在同一個 terminal 操作。
+2. 開啟 00_START.txt，把全部內容貼到公司 terminal。
+3. 依序開啟 01_PART_001.txt 到 11_PART_011.txt；每個檔案全部複製貼入。
+4. 每段應顯示 Part n/11 OK。不要只複製中間的 Base64，請貼整個檔案。
+5. 出現 CORRUPTED 時重新貼同一段即可；同編號會覆寫該段，不會重複追加。
+6. 最後貼 99_RESTORE.txt，出現 RESTORE OK: 183 files verified 才算完成。
+
+還原目錄
+
+$HOME/agentic-dv-paste-7ff1213/agentic-dv-offline-7ff1213/
+  dv-agent-framework/     完整框架（含 L1–L5、BTTF、ChipMEM、GUARD+WikiSkill、Mutation Ladder）
+  harness2/               真正 Harness² Python 核心原始碼、README、pyproject、授權
+  TRANSFER_MANIFEST.json  每個檔案的 SHA-256
+
+整包 SHA-256（payload.gz）：
+032724103ecce0b64a45db5bcc6793f392e5223054e23905fd873d5bc454b937
+
+還原後
+
+開啟 100_VERIFY_AND_INSTALL.txt，依序執行環境設定、離線自我測試、修改 company_profile.json，預覽安裝後再套用至目標 TB。
+不要執行 --global-gemini-dir；不需要修改個人登入設定或憑證。

@@ -23,8 +23,8 @@
 | **Level 1：標準化 DV 助手** | 階層式 `GEMINI.md` 自動載入；`.gemini/skills/*/SKILL.md` 自動發現與按需啟用 | 全域 DV 安全憲章、參數化專案 `GEMINI.md` 範本、8 大 DV 領域技能與檢查表（Testplan / UVM / SVA / Debug / Coverage / Formal / CDC-RDC / RAL） |
 | **Level 2：多代理系統** | `.gemini/agents/*.md` 嚴格 Schema 載入、`@dv-*` 委派、`tools` 白名單、`max_turns` / `timeout_mins` 限制 | 9 個專業 DV 子代理角色定義、最小權限工具矩陣、輸入需求與 `agent_output.schema.json` 結構化輸出契約 |
 | **Level 3：代理團隊協作** | `.gemini/commands/dv/*.toml` 自訂斜線命令（`/dv:triage`、`/dv:plan` 等） | Python `Orchestrator`（DAG 拓撲排程、有界並行池、本地檔案行號證據核驗與自動降級、衝突裁決、`@dv-review` 獨立審查與有界重試迴圈、原子化狀態持久化與恢復、Dry-Run） |
-| **Level 4：Agentic DV 平台** | `.gemini/policies/*.toml` 權限規則、`BeforeTool` / `AfterTool` Hooks、`settings.json` `mcpServers` | 無依賴 JSON-RPC stdio MCP 伺服器範本；VCS、Verdi、Perforce、Regression、ADO、JIRA 六大 Mock 優先轉接器（含 `adapters_validated` 真實環境門控）；`ApprovalGate`；JSONL 稽核日誌與 Token 預算追蹤器 |
-| **Level 5：驗證閉環可信 AI** | 工作區目錄信任（`trustedFolders.json`）與 MCP 查詢整合 | SQLite 四層記憶庫（Semantic / Episodic / Procedural / Evidence）、`project_id` 專案隔離檢索、檔案 SHA-256 與版本溯源、`Candidate → Verified → Human Confirmed` 晉升狀態機、陳舊（Stale）偵測、黃金評測集與四維指標評估器 |
+| **Level 4：Agentic DV 平台** | `.gemini/policies/*.toml` 權限規則、`BeforeTool` / `AfterTool` Hooks、`settings.json` `mcpServers` | 無依賴 JSON-RPC stdio MCP 伺服器範本；VCS、Verdi（含 **BTTF SQLite `waves.db` 波形索引器**、Clock/Zero-Toggle Pruning 與 7 個確定性波形查詢／因果反查工具）、Perforce、Regression、ADO、JIRA 六大 Mock 優先轉接器（含 `adapters_validated` 真實環境門控與 **ChipMEM 貝氏工具失敗恢復建議**）；`ApprovalGate`；JSONL 稽核日誌與 Token 預算追蹤器 |
+| **Level 5：驗證閉環可信 AI** | 工作區目錄信任（`trustedFolders.json`）與 MCP 查詢整合 | SQLite 四層記憶庫（Semantic / Episodic / Procedural / Evidence）、`project_id` 專案隔離與餘弦相似度門檻檢索、**ChipMEM EDA-PASS-only 技能蒸餾**（`## DO`/`## AVOID` + `applies_when`、`evolving`/`frozen` 模式）、檔案 SHA-256 溯源、`Candidate → Verified → Human Confirmed` 晉升狀態機、陳舊（Stale）偵測、黃金評測集與 **Survey 五階段 RTL Mutation Oracle 評測階梯** |
 
 ---
 
@@ -46,19 +46,21 @@ dv-agent-framework/
 │       ├── policies/              # [L4] 唯讀預設、核准閘門與永久禁止 TOML 規則
 │       ├── hooks/                 # [L4] before_tool_guard.py 與 after_tool_audit.py
 │       └── dv/contracts/          # [L2-L3] 子代理結構化輸出 JSON Schema
-├── src/dv_agent_platform/         # [L3-L5] 模組化 Python 平台核心套件（僅用標準函式庫）
-├── fixtures/                      # 合成 DV 測試夾具（AXI FIFO RTL、SVA、UVM、VCS 日誌、URG 覆蓋率、Mock Infra）
+├── src/dv_agent_platform/         # [L3-L5] 模組化 Python 平台核心套件（僅用標準函式庫：含 BTTF waves.db、ChipMEM、GUARD+WikiSkill、Mutation Ladder）
+├── fixtures/                      # 合成 DV 測試夾具（AXI FIFO RTL、SVA、UVM、VCS 日誌、VCD 波形、URG 覆蓋率、Mock Infra）
 ├── evaluation/golden/             # [L5] 黃金評測資料集（dv_golden_cases.json）
-├── scripts/install.py             # 支援 --dry-run、自動備份與回滾的非破壞性安裝腳本
-├── tests/                         # L1–L5 與安裝器完整單元及整合測試套件
-└── docs/                          # 安裝指南、遷移指南與驗證報告
+├── scripts/                       # install.py（非破壞性安裝與回滾）、run_harness2_dv.py、build_offline_paste_kit.py
+├── offline/paste-kit-7ff1213/     # 無外網／僅能貼上文字之公司 server 完整離線部署包（含 Harness² 核心與逐檔 SHA-256 校驗）
+├── tests/                         # L1–L5、安裝器、BTTF、ChipMEM、GUARD+WikiSkill、Mutation Oracle 完整單元及整合測試
+├── tests_e2e/                     # 端對端驗證與跨模組情境測試套件（73 項離線 E2E）
+└── docs/                          # 安裝指南、公司 TB 整合、遷移指南與驗證報告
 ```
 
 ---
 
 ## 快速開始（Linux + VS Code Terminal）
 
-**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[完整貼上式部署包](offline/paste-kit-d8b0c90/README.md)：提供單檔與 10 段文字版本，包含完整框架與 Harness² 核心，附校驗、離線測試與 Gemini CLI 專案安裝步驟。
+**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[完整貼上式部署包（`7ff1213` 最新版）](offline/paste-kit-7ff1213/README.md)：提供單檔與 11 段文字版本，包含完整框架（含 BTTF 波形 SQLite、ChipMEM 雙層記憶、GUARD+WikiSkill 演化護欄、Survey Mutation Oracle 評測階梯）與 Harness² 核心，附逐檔 SHA-256 校驗、離線測試與 Gemini CLI 專案安裝步驟。
 
 1. **預覽安裝（預設 Dry-Run，不修改任何檔案）**：
    ```bash
@@ -85,8 +87,9 @@ dv-agent-framework/
    PYTHONPATH=src python3 -m dv_agent_platform run triage -P log_path=fixtures/logs/simv_fail_seed1042.log -P test=axi_fifo_soft_clr_stress_test
    PYTHONPATH=src python3 -m dv_agent_platform memory --query "soft_clr"
    PYTHONPATH=src python3 -m dv_agent_platform evaluate
+   PYTHONPATH=src python3 -m dv_agent_platform evaluate --mutation-ladder
    ```
-5. **（選配）透過 Harness² 進行遞迴 Harness 演化與優化**：
+5. **（選配）透過 Harness² + GUARD / WikiSkill 進行防退化遞迴 Harness 演化**：
    ```bash
    # 離線驗證完整 Propose-Probe-Compose 與 Experience Library 流程（免 API Key）
    python3 scripts/run_harness2_dv.py --mode dry_sim --k 1 --recursion both
@@ -94,7 +97,7 @@ dv-agent-framework/
    # 連接真實 Gemini CLI（唯讀 plan 模式）對單一黃金案例執行演化
    python3 scripts/run_harness2_dv.py --mode gemini_cli --k 1 --tasks GOLD-TRIAGE-001
    ```
-   > 內建 `validate_dv_harness_safety()` 安全閘門，確保 Harness² 演化過程中不會移除 Prompt-Injection 防火牆、`[APPROVAL REQUIRED]` 閘門、8 大核心 DV 技能，或寫入硬編碼路徑與密鑰。
+   > 內建 `validate_dv_harness_safety()` 安全閘門與 **GUARD + WikiSkill 防退化護欄**（雙層檢查清單、Paired Regret、Mastered 規則鎖定、Soft-HURT 晉升閘門、`[iff <precondition>]` 範圍護欄與永不回滾 `wiki/` 知識與拒絕帳本），確保演化過程中不會削弱 Prompt-Injection 防火牆、`[APPROVAL REQUIRED]` 閘門、8 大核心 DV 技能，或寫入硬編碼路徑與密鑰。
 
 進階部署與調校請參閱：
 - [公司 TB 整合、離線部署與已知限制](./docs/COMPANY_TB_INTEGRATION.md)

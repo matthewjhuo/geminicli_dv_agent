@@ -1,0 +1,5 @@
+# Run these blocks in a Bash terminal (run bash first if your shell is csh/tcsh).
+# Stay in this same staging directory for all subsequent blocks.
+mkdir -p "$HOME/agentic-dv-paste-7ff1213"
+cd "$HOME/agentic-dv-paste-7ff1213" || exit 1
+python3 --version
