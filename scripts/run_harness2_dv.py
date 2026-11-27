@@ -59,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional path to google-research/harness2 checkout (defaults to active venv or $HARNESS2_REPO_DIR).",
     )
     args = parser.parse_args(argv)
+    if args.k < 1:
+        parser.error("--k must be >= 1")
 
     ensure_harness2_importable(args.harness2_dir)
     from harness2.core.schedule import mode_token, run_domain
@@ -86,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     summary["execution_count"] = adapter.execution_count
     summary["editor_calls"] = len(proposer._calls)
+    summary["execution_mode"] = args.mode
+    summary["proposer_kind"] = "deterministic_offline"
+    summary["synthetic"] = args.mode == "dry_sim"
+    summary["validation_scope"] = "workflow plumbing" if args.mode == "dry_sim" else "model rollout with deterministic proposals"
 
     report_path = args.output / "dv_harness2_summary.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)

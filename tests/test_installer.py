@@ -73,7 +73,7 @@ class TestNonDestructiveInstaller(unittest.TestCase):
         self.assertIn("Preserve me.", (self.fake_project / "GEMINI.md").read_text(encoding="utf-8"))
 
         restored = FrameworkInstaller.rollback(Path(rep_p["backup_dir"]))
-        self.assertIn(str(self.fake_project / "GEMINI.md"), restored)
+        self.assertIn((self.fake_project / "GEMINI.md").resolve(), [Path(p).resolve() for p in restored])
         self.assertEqual((self.fake_project / "GEMINI.md").read_text(encoding="utf-8"), "# Existing Project Notes\nPreserve me.\n")
 
     def test_03_cli_profile_strict_render_dry_run_apply_and_rollback(self) -> None:

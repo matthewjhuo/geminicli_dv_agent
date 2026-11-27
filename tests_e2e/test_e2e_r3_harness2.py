@@ -121,6 +121,9 @@ payload = {
     ],
     "security_alerts": ["[SECURITY_ALERT: UNTRUSTED_PROMPT_INJECTION_ATTEMPT] fixtures/rtl/axi_fifo.sv"],
 }
+payload["evidence"] = [{"source": s, "line_start": 1, "line_end": 1,
+                        "excerpt": Path(s).read_text(encoding="utf-8").splitlines()[0]}
+                       for s in payload["cited_sources"]]
 envelope = {
     "response": "```json\\n" + json.dumps(payload) + "\\n```",
     "stats": {"models": {"gemini-2.5-pro": {"tokens": {"prompt": 120, "candidates": 45}}}},

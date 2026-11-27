@@ -18,12 +18,14 @@ import os
 import re
 import shlex
 import subprocess
+import signal
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from ..config import FrameworkConfig
-from ..errors import AdapterNotValidated, ConfidentialityError, ForbiddenOperation
+from ..errors import AdapterNotValidated, ConfidentialityError, ForbiddenOperation, ConfigError
 from ..security.approval import ApprovalGate, ApprovalRequest
 from ..security.command_guard import classify_command
 from ..security.redact import redact
@@ -112,10 +114,27 @@ class BaseAdapter:
 
     def _build_env(self, extra_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         env = dict(os.environ)
-        env.setdefault("DV_PROJECT_ROOT", str(self.config.project_root))
+        env["DV_PROJECT_ROOT"] = str(self.config.project_root)
         if extra_env:
             env.update(extra_env)
         return env
+
+    def _command_argv(self, command, values=None) -> List[str]:
+        """Tokenize before expansion so paths/parameters remain single arguments."""
+        tokens = shlex.split(command) if isinstance(command, str) else list(command)
+        env = self._build_env()
+        env.update({k: str(v) for k, v in (values or {}).items()})
+        pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+        def expand(match):
+            key = match.group(1) or match.group(2)
+            if key not in env:
+                raise ConfigError(f"Unresolved command variable: {key}")
+            return env[key]
+        return self._validate_argv([pattern.sub(expand, str(t)) for t in tokens])
+
+    def _command_cwd(self) -> Path:
+        raw = str(self._adapter_cfg().get("cwd") or ".")
+        return self._resolve_project_file(raw.replace("${DV_PROJECT_ROOT}", str(self.config.project_root)))
 
     def _validate_argv(self, argv: Sequence[str]) -> List[str]:
         if not argv:
@@ -152,6 +171,8 @@ class BaseAdapter:
         acfg = self._adapter_cfg()
         eff_timeout = int(timeout_s if timeout_s is not None else acfg.get("timeout_s", self.config.task_timeout_s))
         eff_max_bytes = int(max_output_bytes if max_output_bytes is not None else acfg.get("max_output_bytes", 65536))
+        if eff_timeout <= 0 or eff_max_bytes <= 0:
+            raise ConfigError("timeout_s and max_output_bytes must be positive")
         run_cwd = Path(cwd).resolve() if cwd is not None else self.config.project_root
         run_cwd.relative_to(self.config.project_root)
         run_env = self._build_env(env)
@@ -159,36 +180,64 @@ class BaseAdapter:
         if self.subprocess_runner is not None:
             raw_res = self.subprocess_runner(cmd_list, run_cwd, eff_timeout, run_env)
         else:
+            # Drain both pipes concurrently, retaining only a bounded prefix.
+            # Extra lookahead lets redaction recognize a token crossing the limit.
+            cap = eff_max_bytes + 8192
+            buffers = [bytearray(), bytearray()]
+            totals = [0, 0]
+            def drain(pipe, index):
+                try:
+                    while True:
+                        chunk = pipe.read(8192)
+                        if not chunk:
+                            break
+                        totals[index] += len(chunk)
+                        remaining = cap - len(buffers[index])
+                        if remaining > 0:
+                            buffers[index].extend(chunk[:remaining])
+                finally:
+                    pipe.close()
+            proc = subprocess.Popen(
+                cmd_list, cwd=str(run_cwd), env=run_env, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False,
+                start_new_session=(os.name != "nt"),
+            )
+            threads = [threading.Thread(target=drain, args=(pipe, i), daemon=True)
+                       for i, pipe in enumerate((proc.stdout, proc.stderr))]
+            for thread in threads:
+                thread.start()
+            timed_out = False
             try:
-                proc = subprocess.run(
-                    cmd_list,
-                    cwd=str(run_cwd),
-                    env=run_env,
-                    capture_output=True,
-                    text=True,
-                    timeout=eff_timeout,
-                    check=False,
-                    shell=False,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-                raw_res = SubprocessResult(
-                    returncode=proc.returncode,
-                    stdout=proc.stdout or "",
-                    stderr=proc.stderr or "",
-                    argv=cmd_list,
-                    timed_out=False,
-                )
-            except subprocess.TimeoutExpired as exc:
-                out_s = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout or b"").decode("utf-8", errors="replace")
-                err_s = exc.stderr if isinstance(exc.stderr, str) else (exc.stderr or b"").decode("utf-8", errors="replace")
-                raw_res = SubprocessResult(
-                    returncode=124,
-                    stdout=out_s,
-                    stderr=err_s or f"Command timed out after {eff_timeout}s",
-                    argv=cmd_list,
-                    timed_out=True,
-                )
+                proc.wait(timeout=eff_timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                if os.name != "nt":
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    proc.kill()
+                proc.wait()
+            for thread in threads:
+                thread.join(timeout=1)
+            if any(t.is_alive() for t in threads):
+                # A descendant can outlive a successfully exited wrapper and hold
+                # its pipes. Terminate the Linux process group before returning.
+                timed_out = True
+                if os.name != "nt":
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    for thread in threads:
+                        thread.join(timeout=1)
+            raw_res = SubprocessResult(
+                124 if timed_out else proc.returncode,
+                buffers[0].decode("utf-8", errors="replace"),
+                buffers[1].decode("utf-8", errors="replace"),
+                cmd_list, timed_out, any(n > eff_max_bytes for n in totals),
+            )
 
         clean_out, trunc_out = _truncate_utf8(redact(raw_res.stdout or ""), eff_max_bytes)
         clean_err, trunc_err = _truncate_utf8(redact(raw_res.stderr or ""), eff_max_bytes)

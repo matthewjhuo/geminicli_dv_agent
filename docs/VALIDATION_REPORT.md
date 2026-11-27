@@ -1,5 +1,12 @@
 # 驗證報告（Validation Report）
 
+> 下方 Level 1–5 表格保留早期驗證紀錄，不代表目前版本或公司 EDA 實機驗收。
+> 公司 TB 修正後的本機驗證：Windows / Python 3.13，單元測試 60 項
+> （58 通過、2 項因缺少真實整合前置條件而略過），離線 E2E 73 項通過。
+> E2E 使用 fake EDA/Gemini CLI，Harness² 缺少時使用 test double。
+> 新增 Linux/Windows CI matrix，但尚未取得遠端 CI 結果。部署步驟與限制見
+> [公司 TB 整合指南](COMPANY_TB_INTEGRATION.md)。
+
 ## 1. 執行摘要
 
 - **驗證環境**：Gemini CLI `0.68.0`、Python `3.13.5`（純標準函式庫相容設計）

@@ -8,6 +8,7 @@ from typing import Optional
 
 from ..adapters import ADOAdapter, JIRAAdapter, PerforceAdapter, RegressionAdapter, VCSAdapter, VerdiAdapter
 from ..config import FrameworkConfig
+from ..dv_tools import parse_filelist, inspect_sv_context
 from ..security.approval import ApprovalGate, approver_from_env
 from ..telemetry.logger import StructuredLogger
 from .protocol import MCPServer, ToolSpec
@@ -29,6 +30,37 @@ def create_dv_mcp_server(
 
     if profile == "dv-vcs":
         vcs = VCSAdapter(config, approval_gate=gate, logger=logger.child("vcs"))
+        srv.register(ToolSpec(
+            name="compile",
+            description="Preview or approval-gated execution of the configured company build command.",
+            input_schema={"type": "object", "properties": {
+                "build_target": {"type": "string", "default": "simv"},
+                "test": {"type": "string", "default": ""},
+                "extra_args": {"type": "array", "items": {"type": "string"}},
+                "dry_run": {"type": "boolean"}, "approval_id": {"type": "string"}}},
+            handler=lambda a: vcs.compile(build_target=a.get("build_target", "simv"),
+                extra_args=a.get("extra_args"), test=a.get("test", ""),
+                dry_run=a.get("dry_run"), approval_id=a.get("approval_id")),
+            read_only=False,
+        ))
+        srv.register(ToolSpec(
+            name="parse_filelist",
+            description="Read-only filelist index (not simulator preprocessing or elaboration).",
+            input_schema={"type": "object", "required": ["filelist_path"],
+                          "properties": {"filelist_path": {"type": "string"}}},
+            handler=lambda a: parse_filelist(a["filelist_path"], config.project_root,
+                allowed_roots=config.testbench.get("read_only_roots", [])),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="inspect_sv_context",
+            description="Read-only regex-based SV/UVM index; not a complete semantic parser.",
+            input_schema={"type": "object", "required": ["files"],
+                          "properties": {"files": {"type": "array", "items": {"type": "string"}}}},
+            handler=lambda a: inspect_sv_context(a["files"], config.project_root,
+                allowed_roots=config.testbench.get("read_only_roots", [])),
+            read_only=True,
+        ))
         srv.register(ToolSpec(
             name="parse_log",
             description="Read-only bounded extraction of first failure and error signatures from a VCS simulation log.",
@@ -178,6 +210,15 @@ def create_dv_mcp_server(
 
     elif profile == "dv-regression":
         regr = RegressionAdapter(config, approval_gate=gate, logger=logger.child("regression"))
+        srv.register(ToolSpec(
+            name="scan_sim_out",
+            description="Read-only scan and cluster local simulation logs.",
+            input_schema={"type": "object", "properties": {
+                "sim_out_dir": {"type": "string", "default": "sim_out"},
+                "pattern": {"type": "string", "default": "simv*.log"}}},
+            handler=lambda a: regr.scan_sim_out(a.get("sim_out_dir", "sim_out"), a.get("pattern", "simv*.log")),
+            read_only=True,
+        ))
         srv.register(ToolSpec(
             name="cluster_failures",
             description="Read-only normalized failure signature clustering across regression seeds.",

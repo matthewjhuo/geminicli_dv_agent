@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+import shlex
 from typing import Any, Dict, List, Optional
 
 from .base import BaseAdapter
+from .logs import is_failure_line
+from ..errors import ConfigError
 
 _HEX_RE = re.compile(r"0x[0-9a-fA-F]+")
 _NUM_RE = re.compile(r"\b\d+\s*(?:ns|ps|us|fs)\b|\bseed[=\s]+\d+\b", re.I)
@@ -24,7 +27,9 @@ class RegressionAdapter(BaseAdapter):
     name = "regression"
 
     def cluster_failures(self, run_id: str = "latest") -> Dict[str, Any]:
-        _ = self.is_mock
+        if not self.is_mock:
+            result = self.scan_sim_out(str(self.config.testbench.get("sim_out_dir") or "sim_out"))
+            return {"run_id": run_id, **result}
         runs = self._load_mock_infra().get("regression", {}).get("failures", [])
         buckets: Dict[str, Dict[str, Any]] = {}
         for item in runs:
@@ -49,6 +54,7 @@ class RegressionAdapter(BaseAdapter):
         for log_file in sorted(target_dir.rglob(pattern)):
             if not log_file.is_file():
                 continue
+            self._resolve_project_file(str(log_file))
             scanned += 1
             text = log_file.read_text(encoding="utf-8", errors="replace")
             m_test = _TEST_RE.search(text)
@@ -57,7 +63,7 @@ class RegressionAdapter(BaseAdapter):
             seed_val = m_seed.group(1) if m_seed else "unknown"
             first_err = None
             for line in text.splitlines():
-                if _LOG_ERR_RE.search(line):
+                if is_failure_line(line):
                     first_err = line.strip()
                     break
             if first_err is None:
@@ -96,9 +102,28 @@ class RegressionAdapter(BaseAdapter):
                approval_id: Optional[str] = None) -> Dict[str, Any]:
         is_dry = self.config.dry_run if dry_run is None else bool(dry_run)
         details = {"suite": suite, "seeds": int(seeds)}
+        if int(seeds) < 1:
+            raise ValueError("seeds must be positive")
+        command = self._adapter_cfg().get("launch_cmd") or self.config.testbench.get("regression_cmd")
+        argv = None
+        if command:
+            prefix = self._adapter_cfg().get("scheduler_prefix") or []
+            argv = ((self._command_argv(prefix) if prefix else []) +
+                    self._command_argv(command, {"SUITE": suite, "SEEDS": int(seeds)}))
+            details.update(argv=argv, command=shlex.join(argv), cwd=str(self._command_cwd()))
         if is_dry:
             return {"status": "dry_run", "requires_approval": True, **details}
         decision = self._require_approval("simulation", f"Launch regression suite={suite} seeds={seeds}", details, approval_id)
         mock = self.is_mock
+        if not mock:
+            if not argv:
+                raise ConfigError("Real regression requires adapters.regression.launch_cmd or testbench.regression_cmd")
+            res = self._run_command(argv, cwd=self._command_cwd())
+            # The wrapper must wait for its work. Async scheduler integration requires
+            # a site-specific wrapper; never invent a queued state or a job ID.
+            return {"status": "completed" if res.returncode == 0 and not res.timed_out else "failed",
+                    "approved_by": decision.approver, **details, "returncode": res.returncode,
+                    "timed_out": res.timed_out, "truncated": res.truncated,
+                    "stdout": res.stdout, "stderr": res.stderr}
         self.logger.log("regression_launched", mock=mock, approver=decision.approver, **details)
         return {"status": "queued_mock" if mock else "queued", "approved_by": decision.approver, **details}

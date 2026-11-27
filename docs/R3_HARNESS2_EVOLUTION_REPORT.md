@@ -1,5 +1,10 @@
 # R3 Harness² 實戰演化驗證報告
 
+> 此為歷史執行紀錄。dry_sim 是合成流程測試；真實演化僅部分完成。
+> 現行評分額外要求可核對的來源行號與摘錄，尚未以新評分器重跑真實模型。
+> scripts/run_harness2_dv.py 的 proposer 目前仍為 deterministic offline proposer。
+> 配額增加不保證所有 rollout 成功，也不證明公司 testbench 能力提升。
+
 本報告記錄 Agentic DV 框架與 Google Research Harness²（透過 `dv_agent_platform.harness2_bridge` 與 `scripts/run_harness2_dv.py`）於離線模擬模式（`dry_sim`）與真實 `gemini_cli` 模式下的實際執行結果與安全閘門驗證。
 
 ---

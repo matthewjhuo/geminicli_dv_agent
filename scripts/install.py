@@ -29,6 +29,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from dv_agent_platform.errors import ConfigError  # noqa: E402
+from dv_agent_platform.jsonc import loads as load_jsonc  # noqa: E402
 from dv_agent_platform.templates import (  # noqa: E402
     CompanyProfile,
     RenderSafetyError,
@@ -102,6 +103,8 @@ class FrameworkInstaller:
         strict_render: bool = False,
         emit_vscode: bool = False,
         emit_env_example: bool = False,
+        replace_customized: bool = False,
+        refresh_framework_settings: bool = False,
     ):
         self.framework_root = Path(framework_root).resolve()
         self.apply = apply
@@ -109,6 +112,9 @@ class FrameworkInstaller:
         self.strict_render = strict_render
         self.emit_vscode = emit_vscode
         self.emit_env_example = emit_env_example
+        self.replace_customized = replace_customized
+        self.refresh_framework_settings = refresh_framework_settings
+        self.warnings: List[str] = []
         self.actions: List[Dict[str, Any]] = []
 
     def _backup_file(self, target: Path, backup_dir: Path, manifest: List[Dict[str, str]]) -> None:
@@ -159,7 +165,7 @@ class FrameworkInstaller:
 
     def install_global(self, user_gemini_dir: Path) -> Dict[str, Any]:
         user_gemini_dir = Path(user_gemini_dir).resolve()
-        ts = time.strftime("%Y%m%d-%H%M%S")
+        ts = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns()}"
         backup_dir = user_gemini_dir / ".dv_agent_backups" / f"global-{ts}"
         manifest: List[Dict[str, str]] = []
 
@@ -209,10 +215,14 @@ class FrameworkInstaller:
         emit_env_example: Optional[bool] = None,
     ) -> Dict[str, Any]:
         project_root = Path(project_root).resolve()
-        ts = time.strftime("%Y%m%d-%H%M%S")
+        ts = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns()}"
         backup_dir = project_root / ".dv_agent" / "backups" / f"project-{ts}"
         manifest: List[Dict[str, str]] = []
         tpl_root = self.framework_root / "project-template"
+        install_state_path = project_root / ".dv_agent" / "install-state.json"
+        installed_hashes = (json.loads(install_state_path.read_text(encoding="utf-8"))
+                            if install_state_path.is_file() else {})
+        next_hashes = dict(installed_hashes)
 
         eff_profile_path = Path(profile_path) if profile_path is not None else self.profile_path
         eff_strict = self.strict_render if strict_render is None else strict_render
@@ -253,7 +263,7 @@ class FrameworkInstaller:
                 if dst.is_file():
                     final_text = merge_markdown_section(dst.read_text(encoding="utf-8"), src_text)
                 else:
-                    final_text = src_text
+                    final_text = merge_markdown_section("", src_text)
                 validate_rendered_content(
                     final_text,
                     filename="GEMINI.md",
@@ -266,6 +276,26 @@ class FrameworkInstaller:
                 if dst.is_file():
                     existing = json.loads(dst.read_text(encoding="utf-8"))
                     merged_obj = merge_settings_json(existing, tpl_obj)
+                    for name, cfg in tpl_obj.get("mcpServers", {}).items():
+                        old = existing.get("mcpServers", {}).get(name)
+                        if old is not None and old != cfg:
+                            if self.refresh_framework_settings:
+                                merged_obj["mcpServers"][name] = cfg
+                            else:
+                                self.warnings.append(f"Preserved existing MCP server {name}; use --refresh-framework-settings to refresh it.")
+                    for event, groups in tpl_obj.get("hooks", {}).items():
+                        framework_names = {h.get("name") for g in groups for h in g.get("hooks", [])}
+                        current_groups = merged_obj.get("hooks", {}).get(event, [])
+                        if self.refresh_framework_settings:
+                            kept = []
+                            for group in current_groups:
+                                kept_hooks = [h for h in group.get("hooks", []) if h.get("name") not in framework_names]
+                                if kept_hooks:
+                                    kept.append({**group, "hooks": kept_hooks})
+                            merged_obj.setdefault("hooks", {})[event] = kept + groups
+                        elif any(h.get("name") in framework_names for g in existing.get("hooks", {}).get(event, [])
+                                 for h in g.get("hooks", [])):
+                            self.warnings.append(f"Preserved existing {event} framework hooks; review --refresh-framework-settings when upgrading.")
                     final_text = json.dumps(merged_obj, indent=2, ensure_ascii=False) + "\n"
                 else:
                     final_text = json.dumps(tpl_obj, indent=2, ensure_ascii=False) + "\n"
@@ -320,7 +350,7 @@ class FrameworkInstaller:
             )
             if vscode_dst.is_file():
                 try:
-                    existing_vscode = json.loads(vscode_dst.read_text(encoding="utf-8"))
+                    existing_vscode = load_jsonc(vscode_dst.read_text(encoding="utf-8"))
                 except json.JSONDecodeError as exc:
                     raise ConfigError(f"Invalid JSON in existing {vscode_dst}: {exc}") from exc
                 merged_vscode = merge_settings_json(existing_vscode, vscode_tpl)
@@ -337,7 +367,21 @@ class FrameworkInstaller:
 
         # Phase 2: All validations passed; execute backups and writes
         for dst, content, is_hook in planned_writes:
+            rel = dst.relative_to(project_root).as_posix()
+            # Markdown/settings have explicit merge rules. Preserve customized
+            # generated assets unless replacement was explicitly requested.
+            merged = rel in {"GEMINI.md", ".gemini/settings.json", ".vscode/settings.json"}
+            desired_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            if dst.is_file() and not merged and not self.replace_customized:
+                current_hash = _sha256(dst)
+                if current_hash != desired_hash and installed_hashes.get(rel) != current_hash:
+                    self.warnings.append(f"Preserved customized file: {rel}; use --replace-customized to replace with backup.")
+                    self.actions.append({"op": "preserve_customized", "target": str(dst)})
+                    continue
             self._write_text(dst, content, backup_dir, manifest, executable=is_hook)
+            next_hashes[rel] = desired_hash
+
+        self._write_text(install_state_path, json.dumps(next_hashes, indent=2) + "\n", backup_dir, manifest)
 
         if self.apply and manifest:
             backup_dir.mkdir(parents=True, exist_ok=True)
@@ -346,6 +390,7 @@ class FrameworkInstaller:
             )
         return {
             "scope": "project",
+            "warnings": self.warnings,
             "dry_run": not self.apply,
             "backup_dir": str(backup_dir),
             "actions": list(self.actions),
@@ -411,6 +456,8 @@ def main(argv: List[str] | None = None) -> int:
     scope_grp.add_argument("--global-only", action="store_true", help="Only install global ~/.gemini configuration")
     scope_grp.add_argument("--project-only", action="store_true", help="Only install project workspace configuration")
     parser.add_argument("--profile", help="Path to company testbench profile JSON")
+    parser.add_argument("--replace-customized", action="store_true", help="Replace customized framework assets with backup")
+    parser.add_argument("--refresh-framework-settings", action="store_true", help="Refresh same-name framework MCP servers with backup")
     parser.add_argument(
         "--strict-render",
         action="store_true",
@@ -451,6 +498,8 @@ def main(argv: List[str] | None = None) -> int:
                 strict_render=args.strict_render,
                 emit_vscode=args.emit_vscode,
                 emit_env_example=args.emit_env_example,
+                replace_customized=args.replace_customized,
+                refresh_framework_settings=args.refresh_framework_settings,
             )
             reports.append(inst_p.install_project(Path(args.project_dir)))
 
