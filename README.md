@@ -58,6 +58,8 @@ dv-agent-framework/
 
 ## 快速開始（Linux + VS Code Terminal）
 
+**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[完整貼上式部署包](offline/paste-kit-d8b0c90/README.md)：提供單檔與 10 段文字版本，包含完整框架與 Harness² 核心，附校驗、離線測試與 Gemini CLI 專案安裝步驟。
+
 1. **預覽安裝（預設 Dry-Run，不修改任何檔案）**：
    ```bash
    python3 scripts/install.py --project-dir "$DV_PROJECT_ROOT"

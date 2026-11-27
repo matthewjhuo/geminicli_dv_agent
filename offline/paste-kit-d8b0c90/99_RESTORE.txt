@@ -1,0 +1,60 @@
+python3 - <<'DV_RESTORE_PYTHON'
+import base64
+import gzip
+import hashlib
+import io
+import json
+from pathlib import Path, PurePosixPath
+import shutil
+import tempfile
+import zipfile
+
+PARTS = 10
+EXPECTED_SHA256 = 'bba84cd87b0dcf39fb9546e9ca1001532ad93c1eab685e74a3a82088db35a9c8'
+destination = Path.cwd() / 'agentic-dv-offline-d8b0c90'
+chunks = []
+for index in range(1, PARTS + 1):
+    path = Path(f'part_{index:03d}.b64')
+    if not path.is_file():
+        raise SystemExit(f'Missing part {index}/{PARTS}: paste it before restoring')
+    chunks.append(b''.join(path.read_bytes().split()))
+try:
+    data = base64.b64decode(b''.join(chunks), validate=True)
+except ValueError as exc:
+    raise SystemExit(f'Invalid Base64: {exc}')
+if hashlib.sha256(data).hexdigest() != EXPECTED_SHA256:
+    raise SystemExit('Archive checksum mismatch: re-paste any part that failed its check')
+if destination.exists():
+    raise SystemExit(f'Destination already exists; nothing overwritten: {destination}')
+with zipfile.ZipFile(io.BytesIO(gzip.decompress(data))) as archive:
+    names = archive.namelist()
+    if len(names) != len(set(names)):
+        raise SystemExit('Duplicate archive entries')
+    for info in archive.infolist():
+        path = PurePosixPath(info.filename)
+        if path.is_absolute() or '..' in path.parts or '\\' in info.filename or ':' in info.filename:
+            raise SystemExit('Unsafe archive path')
+        if (info.external_attr >> 16) & 0o170000 == 0o120000:
+            raise SystemExit('Symlink entry rejected')
+    manifest = json.loads(archive.read('TRANSFER_MANIFEST.json'))
+    if set(names) != set(manifest['files']) | {'TRANSFER_MANIFEST.json'}:
+        raise SystemExit('Manifest file list mismatch')
+    for name, expected in manifest['files'].items():
+        if hashlib.sha256(archive.read(name)).hexdigest() != expected:
+            raise SystemExit(f'File checksum mismatch: {name}')
+    # Validate everything before writing any source file; publish only a full tree.
+    with tempfile.TemporaryDirectory(prefix='.dv-restore-', dir=Path.cwd()) as temp:
+        staging = Path(temp) / 'content'
+        staging.mkdir()
+        for name in names:
+            target = staging / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.read(name))
+        if destination.exists():
+            raise SystemExit('Destination appeared during restore; nothing overwritten')
+        staging.rename(destination)
+print(f'RESTORE OK: {len(manifest["files"])} files verified')
+print(f'Framework commit: {manifest["framework_commit"]}')
+print(f'Location: {destination}')
+
+DV_RESTORE_PYTHON

@@ -1,0 +1,43 @@
+# Bash: execute after RESTORE OK. Use Python 3.12 or 3.13 for the full bundle.
+export DV_AGENT_OFFLINE_HOME="$HOME/agentic-dv-paste-d8b0c90/agentic-dv-offline-d8b0c90"
+export DV_AGENT_FRAMEWORK_HOME="${DV_AGENT_OFFLINE_HOME}/dv-agent-framework"
+export HARNESS2_REPO_DIR="${DV_AGENT_OFFLINE_HOME}/harness2"
+export DV_AGENT_PLATFORM_PYTHONPATH="${DV_AGENT_FRAMEWORK_HOME}/src"
+export PYTHONPATH="${DV_AGENT_PLATFORM_PYTHONPATH}"
+export DV_ADAPTER_MODE="mock"
+export DV_ALLOW_EXTERNAL_UPLOAD="false"
+
+python3 -c 'import sys; assert (3,12) <= sys.version_info[:2] < (3,14), "Full bundle requires Python 3.12 or 3.13"; print(sys.version)'
+
+# Offline checks: do not need a model API call or EDA license.
+cd "${DV_AGENT_FRAMEWORK_HOME}" || exit 1
+python3 -m unittest discover -s tests -p 'test_*.py' -q
+python3 -m unittest discover -s tests_e2e -p 'test_*.py' -q
+python3 scripts/run_harness2_dv.py --mode dry_sim --k 1 --recursion both --output .dv_agent/harness2-selftest
+
+# Create a local customization profile only if it does not already exist.
+if [ ! -e "${DV_AGENT_OFFLINE_HOME}/company_profile.json" ]; then
+  cp project-template/company_profile.example.json "${DV_AGENT_OFFLINE_HOME}/company_profile.json"
+fi
+
+# STOP HERE: edit company_profile.json in VS Code before project installation.
+# Replace example DUT, filelist, directory layout, clocks, interfaces and build/run commands.
+# Then replace the following target with your actual existing TB workspace.
+
+# export DV_PROJECT_ROOT="/actual/company/testbench/workspace"
+
+# Preview only:
+# python3 "${DV_AGENT_FRAMEWORK_HOME}/scripts/install.py" \
+#   --project-dir "${DV_PROJECT_ROOT}" \
+#   --profile "${DV_AGENT_OFFLINE_HOME}/company_profile.json" \
+#   --strict-render --emit-vscode --emit-env-example
+
+# After reviewing the preview, apply:
+# python3 "${DV_AGENT_FRAMEWORK_HOME}/scripts/install.py" \
+#   --project-dir "${DV_PROJECT_ROOT}" \
+#   --profile "${DV_AGENT_OFFLINE_HOME}/company_profile.json" \
+#   --strict-render --emit-vscode --emit-env-example --apply
+
+# Start Gemini from the existing project after installation:
+# cd "${DV_PROJECT_ROOT}"
+# gemini
