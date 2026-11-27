@@ -1,0 +1,4 @@
+# Bash terminal; keep the same directory for every part.
+mkdir -p "$HOME/agentic-dv-paste-0696ff0"
+cd "$HOME/agentic-dv-paste-0696ff0" || exit 1
+python3 --version

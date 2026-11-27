@@ -1,0 +1,35 @@
+# Part 11/11; re-paste this same part if its checksum fails.
+cat > part_011.b64 <<'DV_PAYLOAD_PART_011'
+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
+DV_PAYLOAD_PART_011
+python3 - <<'DV_CHECK_PART'
+import hashlib
+from pathlib import Path
+data = b''.join(Path('part_011.b64').read_bytes().split())
+if hashlib.sha256(data).hexdigest() != '7d6516a3caa47b4d55b8960b0ea27ec2dc8ee2ec6c7f4a91d91ea5b67142027c':
+    raise SystemExit('Part 11 CORRUPTED; paste this part again')
+print('Part 11/11 OK')
+DV_CHECK_PART

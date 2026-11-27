@@ -1,0 +1,23 @@
+# Bash; full bundle: Python 3.12 or 3.13. No model API or EDA license for offline checks.
+export DV_AGENT_OFFLINE_HOME="$HOME/agentic-dv-paste-0696ff0/agentic-dv-offline-0696ff0"
+export DV_AGENT_FRAMEWORK_HOME="$DV_AGENT_OFFLINE_HOME/dv-agent-framework"
+export HARNESS2_REPO_DIR="$DV_AGENT_OFFLINE_HOME/harness2"
+export DV_AGENT_PLATFORM_PYTHONPATH="$DV_AGENT_FRAMEWORK_HOME/src"
+export PYTHONPATH="$DV_AGENT_PLATFORM_PYTHONPATH"
+export DV_ADAPTER_MODE=mock
+export DV_ALLOW_EXTERNAL_UPLOAD=false
+python3 -c 'import sys; assert (3,12) <= sys.version_info[:2] < (3,14), "Use Python 3.12 or 3.13"'
+cd "$DV_AGENT_FRAMEWORK_HOME" || exit 1
+python3 -m unittest discover -s tests -p 'test_*.py' -q
+python3 -m unittest discover -s tests_e2e -p 'test_*.py' -q
+python3 scripts/run_harness2_dv.py --mode dry_sim --k 1 --recursion both --output .dv_agent/harness2-selftest
+if [ ! -e "$DV_AGENT_OFFLINE_HOME/company_profile.json" ]; then
+  cp project-template/company_profile.example.json "$DV_AGENT_OFFLINE_HOME/company_profile.json"
+fi
+# STOP: edit company_profile.json in VS Code (DUT, paths, filelist, clocks, compile/run).
+# Replace the following path with the existing company TB root.
+# export DV_PROJECT_ROOT="/actual/company/testbench"
+# python3 "$DV_AGENT_FRAMEWORK_HOME/scripts/install.py" --project-dir "$DV_PROJECT_ROOT" --profile "$DV_AGENT_OFFLINE_HOME/company_profile.json" --strict-render --emit-vscode --emit-env-example
+# Review the preview, then repeat with --apply.
+# cd "$DV_PROJECT_ROOT"
+# gemini

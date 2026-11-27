@@ -5,6 +5,7 @@
 
 | 快照 | 狀態 |
 | --- | --- |
+| [0696ff0](paste-kit-0696ff0/README.md) | 建議版：包含執行完整性、MCP、預算與續跑改進 |
 | [d8b0c90](paste-kit-d8b0c90/README.md) | 歷史版；尚未包含執行完整性改進 |
 
 完整功能含 Harness² 請用 Python 3.12/3.13，沿用公司已核准的 Gemini CLI。
