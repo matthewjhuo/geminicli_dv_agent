@@ -252,10 +252,12 @@ class MemoryStore:
 
         q_tokens = set(_tokenize(query))
         if not q_tokens:
-            return rows[:limit]
+            return [doc for doc in rows if not self.check_staleness(doc["entry_id"], project_id)][:limit]
 
         scored: List[tuple[float, Dict[str, Any]]] = []
         for doc in rows:
+            if self.check_staleness(doc["entry_id"], project_id):
+                continue
             doc_tokens = _tokenize(f"{doc['title']} {doc['content']} {' '.join(doc['tags'])}")
             if not doc_tokens:
                 continue

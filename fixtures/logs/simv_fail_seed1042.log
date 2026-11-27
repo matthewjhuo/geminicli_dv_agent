@@ -1,0 +1,12 @@
+Chronologic VCS simulator copyright 1991-2026
+Command: ./simv +UVM_TESTNAME=axi_fifo_soft_clr_stress_test +ntb_random_seed=1042
+UVM_INFO @ 0 ns: reporter [RNTST] Running test axi_fifo_soft_clr_stress_test...
+UVM_INFO @ 1240 ns: uvm_test_top.m_env.m_vseq [VSEQ] Asserting soft_clr during egress backpressure
+"fixtures/verif/axi_fifo_sva.sv", 9: tb_top.u_dut.u_sva.AST_HOLD_ON_STALL: started at 1250ns failed at 1260ns
+    Offending '(m_valid && $stable(m_data))'
+[SVA][AST_HOLD_ON_STALL] m_valid dropped or m_data changed while stalled
+UVM_ERROR fixtures/verif/tb_axi_fifo_sb.sv(21) @ 1310 ns: uvm_test_top.m_env.m_sb [SB_MISMATCH] Exp=0xdeadbeef Act=0x10203040
+UVM_FATAL @ 1350 ns: reporter [MAX_ERR] Reached max UVM_ERROR threshold (1)
+--- UVM Report Summary ---
+UVM_ERROR :    1
+UVM_FATAL :    1

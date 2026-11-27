@@ -12,7 +12,11 @@ def _parse_fsdb_table(stdout: str, fallback_signals: List[str]) -> List[Dict[str
     if not lines:
         return []
     header_tokens = lines[0].split()
-    has_header = any(not tok.replace(".", "", 1).isdigit() for tok in header_tokens)
+    try:
+        float(header_tokens[0])
+        has_header = False
+    except ValueError:
+        has_header = True
     if has_header:
         col_names = header_tokens
         data_lines = lines[1:]
@@ -21,6 +25,13 @@ def _parse_fsdb_table(stdout: str, fallback_signals: List[str]) -> List[Dict[str
         data_lines = lines
 
     samples: List[Dict[str, Any]] = []
+    time_header = col_names[0].lower() if col_names else "time_ns"
+    unit = "ns"
+    for candidate in ("fs", "ps", "ns", "us", "ms"):
+        if candidate in time_header:
+            unit = candidate
+            break
+    scale = {"fs": 0.000001, "ps": 0.001, "ns": 1.0, "us": 1000.0, "ms": 1000000.0}[unit]
     for row in data_lines:
         parts = row.split()
         if not parts:
@@ -30,7 +41,7 @@ def _parse_fsdb_table(stdout: str, fallback_signals: List[str]) -> List[Dict[str
             col = col_names[idx] if idx < len(col_names) else f"col_{idx}"
             if idx == 0 and col.lower().startswith("time"):
                 try:
-                    item["time_ns"] = int(float(val))
+                    item["time_ns"] = float(val) * scale
                 except ValueError:
                     item["time_ns"] = val
             else:
@@ -79,6 +90,8 @@ class VerdiAdapter(BaseAdapter):
         dry_run: Optional[bool] = None,
         approval_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        if start_ns < 0 or end_ns < start_ns:
+            raise ValueError("Waveform window must satisfy 0 <= start_ns <= end_ns")
         resolved = self._resolve_project_file(fsdb_path)
         rel_fsdb = resolved.relative_to(self.config.project_root).as_posix()
         is_dry = self.config.dry_run if dry_run is None else bool(dry_run)
@@ -112,6 +125,7 @@ class VerdiAdapter(BaseAdapter):
             "argv": res.argv,
             "returncode": res.returncode,
             "timed_out": res.timed_out,
+            "truncated": res.truncated,
             "samples": samples,
             "stderr": res.stderr,
         }

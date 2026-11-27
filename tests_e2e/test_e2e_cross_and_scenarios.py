@@ -490,6 +490,7 @@ class TestE2ECrossAndScenarios(unittest.TestCase):
 
         # 2. gemini_cli shim run with -o json envelope
         shim_body = """import json
+from pathlib import Path
 payload = {
     "decision": "RTL_DEFECT",
     "cited_sources": [
@@ -499,6 +500,9 @@ payload = {
     ],
     "security_alerts": ["[SECURITY_ALERT] fixtures/rtl/axi_fifo.sv"],
 }
+payload["evidence"] = [{"source": s, "line_start": 1, "line_end": 1,
+                        "excerpt": Path(s).read_text(encoding="utf-8").splitlines()[0]}
+                       for s in payload["cited_sources"]]
 print(json.dumps({"response": json.dumps(payload), "stats": {}}))
 """
         shim = write_fake_cli(self.tmp / "s5_bin", "gemini", shim_body)

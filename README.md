@@ -11,7 +11,7 @@
 - **晶片研發級資安與治理紅線**：
   - **預設唯讀（Read-Only by Default）**：源碼修改與 VCS/Verdi/Formal 執行一律經過 Policy `ask_user` 與 Python `ApprovalGate` 雙重核准。
   - **Perforce 永久禁提**：`p4 submit`、`p4 push`、`p4 obliterate`、`p4 revert` 於 Policy Engine（`priority = 999`）、`BeforeTool` Hook 與轉接器程式碼三層永久阻斷。
-  - **不可信資料防火牆（Prompt-Injection Immunity）**：所有 RTL、UVM、日誌、規格書、ADO/JIRA 工單皆視為被動不可信資料（以 `<untrusted_dv_data>` 隔離並自動掃描注入語句）。
+  - **不可信資料防護（Prompt-Injection Defense）**：所有 RTL、UVM、日誌、規格書、ADO/JIRA 工單皆視為被動不可信資料（以 `<untrusted_dv_data>` 隔離並掃描注入語句）。這些是多層防護，不能保證模型免疫注入。
   - **零硬編碼路徑與零內嵌憑證**：全面透過環境變數（`$DV_PROJECT_ROOT`、`$GEMINI_PROJECT_DIR` 等）解析；日誌與狀態自動遮蔽敏感 Token/Key；外部上傳預設關閉（`DV_ALLOW_EXTERNAL_UPLOAD=false`）。
 
 ---
@@ -95,6 +95,7 @@ dv-agent-framework/
    > 內建 `validate_dv_harness_safety()` 安全閘門，確保 Harness² 演化過程中不會移除 Prompt-Injection 防火牆、`[APPROVAL REQUIRED]` 閘門、8 大核心 DV 技能，或寫入硬編碼路徑與密鑰。
 
 進階部署與調校請參閱：
+- [公司 TB 整合、離線部署與已知限制](./docs/COMPANY_TB_INTEGRATION.md)
 - [安裝指南 (`docs/INSTALLATION_GUIDE.md`)](./docs/INSTALLATION_GUIDE.md)
 - [遷移與真實工具鏈接軌指南 (`docs/MIGRATION_GUIDE.md`)](./docs/MIGRATION_GUIDE.md)
 - [完整驗證報告 (`docs/VALIDATION_REPORT.md`)](./docs/VALIDATION_REPORT.md)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -183,11 +184,17 @@ class CompanyProfile:
 
     @property
     def dry_run(self) -> bool:
-        return bool(self.project.get("dry_run", True))
+        value = self.project.get("dry_run", True)
+        if not isinstance(value, bool):
+            raise ConfigError("project.dry_run must be a JSON boolean")
+        return value
 
     @property
     def allow_external_upload(self) -> bool:
-        return bool(self.project.get("allow_external_upload", False))
+        value = self.project.get("allow_external_upload", False)
+        if not isinstance(value, bool):
+            raise ConfigError("project.allow_external_upload must be a JSON boolean")
+        return value
 
     @property
     def python_bin(self) -> str:
@@ -324,23 +331,24 @@ def render_gemini_md(profile: CompanyProfile) -> str:
     reg_spec = str(tb.get("reg_spec") or "regs.rdl")
     testplan = str(tb.get("testplan") or f"{profile.project_id}_testplan.md")
 
-    compile_cmd = str(
+    display_command = lambda value: shlex.join([str(t) for t in value]) if isinstance(value, list) else str(value)
+    compile_cmd = display_command(
         tb.get("compile_cmd")
         or 'make -C "${DV_PROJECT_ROOT}/verif/sim" comp TEST=${TEST}'
     )
-    sim_cmd = str(
+    sim_cmd = display_command(
         tb.get("sim_cmd")
         or 'make -C "${DV_PROJECT_ROOT}/verif/sim" run TEST=${TEST} SEED=${SEED} DUMP_FSDB=${DUMP_FSDB}'
     )
-    regression_cmd = str(
+    regression_cmd = display_command(
         tb.get("regression_cmd")
         or 'make -C "${DV_PROJECT_ROOT}/verif/sim" regress SUITE=${SUITE}'
     )
-    urg_cmd = str(
+    urg_cmd = display_command(
         tb.get("urg_cmd")
         or 'urg -dir "${SIM_OUT_DIR}/cov.vdb" -format text -report "${SIM_OUT_DIR}/urgReport"'
     )
-    verdi_cmd = str(
+    verdi_cmd = display_command(
         tb.get("verdi_cmd")
         or 'verdi -dbdir "${SIM_OUT_DIR}/simv.daidir" -ssf "${SIM_OUT_DIR}/${TEST}_${SEED}/waves.fsdb"'
     )

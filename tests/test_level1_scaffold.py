@@ -151,6 +151,8 @@ class TestLevel1StandardizedDVAssistant(unittest.TestCase):
         self.assertGreaterEqual(checked_count, 18)
 
     def test_04_gemini_cli_native_skill_discovery(self) -> None:
+        if os.environ.get("DV_TEST_LIVE_GEMINI") != "1":
+            self.skipTest("Set DV_TEST_LIVE_GEMINI=1 to run native CLI integration")
         gemini_bin = shutil.which("gemini")
         if not gemini_bin:
             self.skipTest("gemini CLI binary not in PATH")
@@ -177,6 +179,8 @@ class TestLevel1StandardizedDVAssistant(unittest.TestCase):
                 env=env,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=30,
                 check=False,
             )

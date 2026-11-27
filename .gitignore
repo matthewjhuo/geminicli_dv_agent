@@ -25,4 +25,5 @@ simv.daidir/
 ucli.key
 vc_hdrs.h
 *.log
+!fixtures/logs/*.log
 urgReport/
