@@ -30,6 +30,20 @@ def _parse_kv(items: List[str]) -> dict:
     return out
 
 
+def _orchestrator(cfg, backend):
+    memory_provider = MemoryStore(cfg.memory_db, cfg.project_root).format_context if cfg.memory_db.is_file() else None
+    return Orchestrator(cfg, backend=backend, memory_context_provider=memory_provider)
+
+
+def _print_run(state) -> int:
+    print(json.dumps({
+        "run_id": state["run_id"], "status": state["status"], "dry_run": state["dry_run"],
+        "levels": state["graph"]["levels"],
+        "aggregate_decision": (state.get("aggregate") or {}).get("decision"), "usage": state.get("usage"),
+    }, indent=2, ensure_ascii=False))
+    return 0 if state["status"] in {"succeeded", "planned"} else 1
+
+
 def _handle_memory(root: Optional[Path], mem_args: List[str]) -> int:
     sub_actions = {"add-candidate", "verify", "promote", "check-staleness", "search"}
     action = mem_args[0] if mem_args and mem_args[0] in sub_actions else "search"
@@ -159,6 +173,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_run.add_argument("-P", "--param", action="append", default=[], help="Workflow parameter KEY=VALUE")
     p_run.add_argument("--execute", action="store_true", help="Disable dry-run and invoke Gemini CLI in read-only plan mode")
 
+    p_resume = sub.add_parser("resume", help="Preview or explicitly resume an interrupted workflow, preserving charged usage")
+    p_resume.add_argument("run_id")
+    p_resume.add_argument("--execute", action="store_true", help="Resume with Gemini CLI in read-only plan mode")
+
     p_runs = sub.add_parser("runs", help="List persisted workflow runs")
     p_runs.set_defaults(func="runs")
 
@@ -212,6 +230,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             cfg = FrameworkConfig.load(project_root=root)
             print(json.dumps(StateStore(cfg.runs_dir).load(args.run_id), indent=2, ensure_ascii=False))
             return 0
+
+        if args.cmd == "resume":
+            cfg = FrameworkConfig.load(project_root=root)
+            if not args.execute:
+                state = StateStore(cfg.runs_dir).load(args.run_id)
+                print(json.dumps({"mode": "resume_preview", "run_id": args.run_id,
+                                  "status": state["status"], "usage": state.get("usage")}, indent=2))
+                return 0
+            backend = GeminiCliBackend(cwd=str(cfg.project_root), approval_mode="plan")
+            return _print_run(_orchestrator(cfg, backend).resume(args.run_id))
 
         if args.cmd == "report":
             cfg = FrameworkConfig.load(project_root=root)
@@ -272,17 +300,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             params = _parse_kv(args.param)
             cfg = FrameworkConfig.load(project_root=root, overrides={"dry_run": not args.execute})
             backend = GeminiCliBackend(cwd=str(cfg.project_root), approval_mode="plan") if args.execute else None
-            orch = Orchestrator(cfg, backend=backend)
+            orch = _orchestrator(cfg, backend)
             state = orch.run_workflow(args.workflow, params=params)
-            print(json.dumps({
-                "run_id": state["run_id"],
-                "status": state["status"],
-                "dry_run": state["dry_run"],
-                "levels": state["graph"]["levels"],
-                "aggregate_decision": (state.get("aggregate") or {}).get("decision"),
-                "usage": state.get("usage"),
-            }, indent=2, ensure_ascii=False))
-            return 0
+            return _print_run(state)
     except (DVAgentError, ValueError, KeyError, FileNotFoundError) as exc:
         print(json.dumps({"error": type(exc).__name__, "message": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1

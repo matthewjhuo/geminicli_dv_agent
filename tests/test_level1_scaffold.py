@@ -124,15 +124,16 @@ class TestLevel1StandardizedDVAssistant(unittest.TestCase):
     def test_03_zero_hardcoded_paths_and_zero_secrets_across_all_files(self) -> None:
         checked_count = 0
         for path in STAGING_ROOT.rglob("*"):
+            relative_parts = path.relative_to(STAGING_ROOT).parts
             if (
                 not path.is_file()
                 or path.suffix.lower() in {".pyc", ".pdf"}
-                or "__pycache__" in path.parts
-                or ".git" in path.parts
-                or ".venv" in path.parts
-                or ".dv_agent" in path.parts
-                or "runs" in path.parts
-                or "papers" in path.parts
+                or "__pycache__" in relative_parts
+                or ".git" in relative_parts
+                or ".venv" in relative_parts
+                or ".dv_agent" in relative_parts
+                or "runs" in relative_parts
+                or "papers" in relative_parts
             ):
                 continue
             if path.resolve() == Path(__file__).resolve():

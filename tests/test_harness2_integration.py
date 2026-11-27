@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -86,6 +87,7 @@ class TestHarness2Integration(unittest.TestCase):
                 execution_mode="dry_sim",
                 task_filter=["GOLD-TRIAGE-001", "GOLD-SEC-004"],
             )
+            out_root = adapter.output_root
             proposer = DVOfflineProposer(adapter.spec.channels["proposer"])
 
             summary = run_domain(
@@ -110,6 +112,11 @@ class TestHarness2Integration(unittest.TestCase):
             second_before = summary["tasks"][1]["library_entries_before"]
             self.assertGreaterEqual(second_before["agg"], 1)
             self.assertGreaterEqual(second_before["seq"], 1)
+            if sys.platform == "win32":
+                # Validate the exact temporary target before recursive cleanup.
+                self.assertTrue(out_root.samefile(Path(tmp_dir)))
+                shutil.rmtree(out_root)
+                self.assertFalse(Path(tmp_dir).exists())
 
 
 if __name__ == "__main__":

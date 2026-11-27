@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -86,12 +87,21 @@ def validate_guard_scoping(
     return violations
 
 
+def _validate_scores(scores):
+    if not isinstance(scores, Mapping):
+        raise ValueError("Scores must be a mapping")
+    if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in scores.values()):
+        raise ValueError("Scores must be finite numbers between 0 and 1")
+
+
 def evaluate_two_layer_checklist(
     layer1_predicates: Mapping[str, bool],
     layer2_predicates: Mapping[str, bool],
 ) -> Dict[str, Any]:
     """GUARD 2-Layer self-review: Layer 1 execution/safety failures zero out Layer 2 semantic credit."""
-    l1_results = {k: bool(v) for k, v in layer1_predicates.items()}
+    if any(type(v) is not bool for v in [*layer1_predicates.values(), *layer2_predicates.values()]):
+        raise ValueError("Checklist predicates must be actual booleans")
+    l1_results = dict(layer1_predicates)
     l1_passed = all(l1_results.values()) if l1_results else True
     l1_failed = [k for k, ok in l1_results.items() if not ok]
 
@@ -117,6 +127,8 @@ def compute_paired_regret(
     mastery_threshold: float = 0.999,
 ) -> Dict[str, Any]:
     """Compute GUARD Paired Directional Regret (``delta_hurt``, ``delta_gap``, ``priority``) & Pinning."""
+    _validate_scores(prev_scores)
+    _validate_scores(curr_scores)
     all_keys = sorted(set(prev_scores.keys()) | set(curr_scores.keys()))
     per_criterion: Dict[str, Dict[str, Any]] = {}
     regressed: List[str] = []
@@ -165,10 +177,14 @@ def evaluate_soft_hurt_gate(
     candidate_scores: Mapping[str, float],
     *,
     pinned_criteria: Optional[Sequence[str]] = None,
-    strict_pinning: bool = False,
+    strict_pinning: bool = True,
 ) -> Dict[str, Any]:
     """GUARD Soft-HURT non-regression promotion gate (promotes iff ``delta_mean > hurt``)."""
-    keys = sorted(set(baseline_scores.keys()) | set(candidate_scores.keys()))
+    _validate_scores(baseline_scores)
+    _validate_scores(candidate_scores)
+    if set(baseline_scores) != set(candidate_scores):
+        raise ValueError("Baseline and candidate must cover exactly the same criteria")
+    keys = sorted(baseline_scores)
     if not keys:
         return {
             "accepted": False,
@@ -203,7 +219,7 @@ def evaluate_soft_hurt_gate(
 
     hurt = hurt_sum / n
     gain = gain_sum / n
-    pinned_set = set(pinned_criteria or [])
+    pinned_set = set(pinned_criteria or [k for k in keys if baseline_scores[k] >= 0.999])
     pinned_regressions = [k for k in regressed if k in pinned_set]
 
     if strict_pinning and pinned_regressions:
@@ -278,7 +294,7 @@ class WikiPattern:
 
 
 class WikiSkillLedger:
-    """Persistent, never-rolled-back WikiSkill knowledge layer + GUARD Rejection Ledger."""
+    """Local persistent wiki and rejection ledger; ordinary files, not an immutable store."""
 
     def __init__(self, wiki_root: Path | str, *, max_rejected: int = 100):
         self.wiki_root = Path(wiki_root)
@@ -348,7 +364,7 @@ class WikiSkillLedger:
         *,
         task_signature: str = "wf:generic",
     ) -> Dict[str, Any]:
-        """Append immutable audit entry to ``skill-impact.md`` and, if rejected, to Rejection Ledger."""
+        """Append local audit entry to ``skill-impact.md`` and, if rejected, to Rejection Ledger."""
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         accepted = bool(gate_result.get("accepted", False))
         outcome = "Accepted" if accepted else "Rejected"

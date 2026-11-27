@@ -1,5 +1,7 @@
 # R3 Harness² 實戰演化驗證報告
 
+> 歷史驗證紀錄：不代表本次版本或公司環境已驗證。最新狀態請見 IMPLEMENTATION_STATUS.md 與 docs/CORRECTNESS_REMEDIATION.md。
+
 > 此為歷史執行紀錄。dry_sim 是合成流程測試；真實演化僅部分完成。
 > 現行評分額外要求可核對的來源行號與摘錄，尚未以新評分器重跑真實模型。
 > scripts/run_harness2_dv.py 的 proposer 目前仍為 deterministic offline proposer。

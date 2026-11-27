@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import sys
 import tempfile
@@ -20,6 +21,11 @@ from dv_agent_platform.config import FrameworkConfig  # noqa: E402
 from dv_agent_platform.errors import PromotionError  # noqa: E402
 from dv_agent_platform.memory import MemoryStore, StatisticalToolMemory, classify_eda_error  # noqa: E402
 from dv_agent_platform.security.approval import ApprovalFileApprover, ApprovalGate  # noqa: E402
+
+
+import sys as _test_sys
+_test_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from approval_helpers import grant_memory
 
 
 class TestChipMEMDualMemory(unittest.TestCase):
@@ -79,6 +85,14 @@ class TestChipMEMDualMemory(unittest.TestCase):
             )
 
         # 4) Valid EDA-PASS procedural distillation succeeds and formats DO/AVOID + APPLIES_WHEN
+        # Synthetic test record exercises validation; no EDA is run by this test.
+        artifact = self._tmp / "eda-result.json"
+        artifact.write_text(json.dumps({
+            "record_version": "dv-eda-result/v1", "project_id": "proj_soc", "tool": "vcs",
+            "check_name": "AST_HOLD_ON_STALL", "passed": True, "returncode": 0, "timed_out": False,
+            "execution_mode": "real", "revision": "@CL48210",
+            "source_hashes": {"fixtures/rtl/axi_fifo.sv": hashlib.sha256((self._tmp / "fixtures/rtl/axi_fifo.sv").read_bytes()).hexdigest()},
+        }), encoding="utf-8")
         eid = store.distill_procedural_skill(
             "proj_soc",
             "AXI-Stream soft_clr stall protection",
@@ -86,10 +100,12 @@ class TestChipMEMDualMemory(unittest.TestCase):
             avoid_rules=["Unconditionally clearing wr_ptr_q/rd_ptr_q during output stall"],
             applies_when="DUT is an AXI-Stream FIFO with synchronous soft_clr",
             provenance=prov,
-            eda_verification={"tool": "vcs", "passed": True, "check_name": "AST_HOLD_ON_STALL"},
+            eda_verification={"tool": "vcs", "passed": True, "check_name": "AST_HOLD_ON_STALL",
+                              "artifact": "eda-result.json", "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest()},
             tags=["axi_stream", "soft_clr"],
         )
         store.verify_entry(eid, "proj_soc")
+        grant_memory(self, store, eid, "proj_soc", "human:dv_lead", "APR-CM-1")
         entry = store.promote_to_confirmed(eid, "proj_soc", approver="human:dv_lead", approval_id="APR-CM-1")
         self.assertIn("## DO", entry["content"])
         self.assertIn("## AVOID", entry["content"])

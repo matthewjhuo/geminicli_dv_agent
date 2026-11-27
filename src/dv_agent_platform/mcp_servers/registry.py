@@ -158,7 +158,7 @@ def create_dv_mcp_server(
                 prune_clocks=a.get("prune_clocks", True),
                 prune_zero_toggle=a.get("prune_zero_toggle", True),
             ),
-            read_only=True,
+            read_only=False,
         ))
         srv.register(ToolSpec(
             name="find_signal_in_scope",
@@ -192,12 +192,12 @@ def create_dv_mcp_server(
                 "properties": {
                     "db_path": {"type": "string"},
                     "signal_name": {"type": "string"},
-                    "time": {"type": "integer"},
+                    "time": {"type": "number"},
                     "scope": {"type": "string"},
                 },
             },
             handler=lambda a: verdi.get_value_at_time(
-                a["db_path"], a["signal_name"], int(a["time"]), scope=a.get("scope")
+                a["db_path"], a["signal_name"], a["time"], scope=a.get("scope")
             ),
             read_only=True,
         ))
@@ -211,8 +211,8 @@ def create_dv_mcp_server(
                     "db_path": {"type": "string"},
                     "signal_name": {"type": "string"},
                     "value": {"type": "string"},
-                    "start_time": {"type": "integer"},
-                    "end_time": {"type": "integer"},
+                    "start_time": {"type": "number"},
+                    "end_time": {"type": "number"},
                     "scope": {"type": "string"},
                 },
             },
@@ -235,8 +235,8 @@ def create_dv_mcp_server(
                 "properties": {
                     "db_path": {"type": "string"},
                     "signal_name": {"type": "string"},
-                    "start_time": {"type": "integer"},
-                    "end_time": {"type": "integer"},
+                    "start_time": {"type": "number"},
+                    "end_time": {"type": "number"},
                     "scope": {"type": "string"},
                     "limit": {"type": "integer", "default": 200},
                 },
@@ -264,13 +264,13 @@ def create_dv_mcp_server(
         ))
         srv.register(ToolSpec(
             name="backward_trace_window",
-            description="Read-only causal backward trace (t <= violation_time) over specified signals in waves.db.",
+            description="Read-only backward event history (t <= violation_time) over specified signals in waves.db.",
             input_schema={
                 "type": "object",
                 "required": ["db_path", "violation_time", "signals"],
                 "properties": {
                     "db_path": {"type": "string"},
-                    "violation_time": {"type": "integer"},
+                    "violation_time": {"type": "number"},
                     "signals": {"type": "array", "items": {"type": "string"}},
                     "window_before": {"type": "integer", "default": 50},
                     "scope": {"type": "string"},
@@ -279,7 +279,7 @@ def create_dv_mcp_server(
             },
             handler=lambda a: verdi.backward_trace_window(
                 a["db_path"],
-                int(a["violation_time"]),
+                a["violation_time"],
                 a["signals"],
                 window_before=int(a.get("window_before", 50)),
                 scope=a.get("scope"),

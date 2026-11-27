@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from ..config import FrameworkConfig
-from ..errors import AdapterNotValidated, ConfidentialityError, ForbiddenOperation, ConfigError
+from ..errors import AdapterNotValidated, ConfidentialityError, ForbiddenOperation, ConfigError, UnsupportedOperation
 from ..memory.statistical import StatisticalToolMemory, classify_eda_error
 from ..security.approval import ApprovalGate, ApprovalRequest
 from ..security.command_guard import classify_command
@@ -82,7 +82,7 @@ class BaseAdapter:
         self.approval_gate = approval_gate or ApprovalGate()
         self.logger = logger or StructuredLogger(config.logs_dir / "adapters.jsonl", component=f"adapter.{self.name}")
         self.subprocess_runner = subprocess_runner
-        self.statistical_memory = statistical_memory
+        self.statistical_memory = statistical_memory or StatisticalToolMemory(config.state_dir / "tool_stats.db")
         self._failure_streaks: Dict[tuple[str, str], int] = {}
 
     def _adapter_cfg(self) -> Dict[str, Any]:
@@ -103,6 +103,13 @@ class BaseAdapter:
                           approval_id: Optional[str] = None):
         req = ApprovalRequest(category=category, summary=summary, details=details)
         return self.approval_gate.require(req, approval_id=approval_id)
+
+    def _require_mock(self) -> None:
+        if not self.is_mock:
+            raise UnsupportedOperation(
+                f"Real {self.name} integration is not implemented. Configure a site adapter; "
+                "adapters_validated alone does not implement a service connection."
+            )
 
     def _check_outbound_confidentiality(self, external: bool, target: str) -> None:
         if external and not self.config.allow_external_upload:
@@ -249,10 +256,10 @@ class BaseAdapter:
         advisory: Optional[Dict[str, Any]] = None
         if self.statistical_memory is not None:
             cmd_key = f"{self.name}:{Path(cmd_list[0]).name.lower()}"
-            succeeded = int(raw_res.returncode) == 0 and not bool(raw_res.timed_out)
             err_class = classify_eda_error(
                 cmd_key, int(raw_res.returncode), clean_out, clean_err, bool(raw_res.timed_out)
             )
+            succeeded = int(raw_res.returncode) == 0 and not bool(raw_res.timed_out) and err_class == "none"
             streak_key = (cmd_key, err_class)
             if succeeded:
                 # Record success for any active error streak on this cmd and reset streaks

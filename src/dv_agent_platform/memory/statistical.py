@@ -93,7 +93,7 @@ _ERR_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
     ("vcs_compile_syntax", re.compile(r"Error-\[SE\]|syntax\s+error", re.I)),
     ("vcs_compile_undef", re.compile(r"Error-\[(?:XMRE|IPDW|UII|TMAFTC)\]|undefined\s+(?:identifier|module|macro)|cannot\s+find\s+include", re.I)),
     ("vcs_elab_error", re.compile(r"Error-\[[A-Z0-9_]+\]|elaboration\s+failed|port\s+connection", re.I)),
-    ("sva_assertion_fail", re.compile(r"assertion\s+.*failed|\[SVA\]|AST_[A-Z0-9_]+", re.I)),
+    ("sva_assertion_fail", re.compile(r"assertion\s+.*failed|\[SVA\].*(?:fail|error)|AST_[A-Z0-9_]+.*(?:fail|error)", re.I)),
     ("uvm_fatal", re.compile(r"\bUVM_FATAL\b|PH_TIMEOUT", re.I)),
     ("uvm_error", re.compile(r"\bUVM_ERROR\b", re.I)),
     ("fsdb_missing_or_corrupt", re.compile(r"fsdb(?:report)?.*(?:not\s+found|corrupt|invalid\s+signal|cannot\s+open)", re.I)),
@@ -112,12 +112,13 @@ def classify_eda_error(
     """Deterministic classification of EDA/DV subprocess failures into ChipMEM error classes."""
     if timed_out:
         return "timeout"
-    if int(returncode) == 0:
-        return "none"
     blob = f"{stderr or ''}\n{stdout or ''}"
+    blob = re.sub(r"(?m)^.*\bUVM_(?:ERROR|FATAL)\s*:\s*0\s*$", "", blob)
     for err_class, pat in _ERR_PATTERNS:
         if pat.search(blob):
             return err_class
+    if int(returncode) == 0:
+        return "none"
     tool_l = (tool or "").lower()
     if "fsdb" in tool_l or "verdi" in tool_l:
         return "fsdb_missing_or_corrupt"
@@ -140,15 +141,20 @@ class StatisticalToolMemory:
         if mode not in {"evolving", "frozen"}:
             raise ValueError(f"mode must be 'evolving' or 'frozen', got {mode!r}")
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.shrinkage_k = float(shrinkage_k)
         self.switch_threshold = float(switch_threshold)
         self.mode = mode
-        self._init_db()
+        if mode == "frozen":
+            if not self.db_path.is_file():
+                raise FileNotFoundError(self.db_path)
+        else:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._init_db()
 
     @contextlib.contextmanager
     def _connect(self):
-        conn = sqlite3.connect(str(self.db_path))
+        conn = (sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)
+                if self.mode == "frozen" else sqlite3.connect(str(self.db_path)))
         conn.row_factory = sqlite3.Row
         try:
             with conn:

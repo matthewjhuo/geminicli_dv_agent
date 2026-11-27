@@ -33,12 +33,10 @@ class EvidenceVerifier:
     def __init__(self, project_root: Path, max_file_bytes: int = 50_000_000):
         self.root = Path(project_root).resolve()
         self.max_file_bytes = max_file_bytes
-        self._cache: Dict[Path, List[str]] = {}
 
     def _lines(self, path: Path) -> List[str]:
-        if path not in self._cache:
-            self._cache[path] = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        return self._cache[path]
+        # Sources can change during a review/retry. Never certify cached old text.
+        return path.read_text(encoding="utf-8", errors="replace").splitlines()
 
     def verify(self, ev: Dict[str, Any]) -> Tuple[str, str]:
         source = str(ev.get("source", ""))
@@ -78,7 +76,8 @@ class EvidenceVerifier:
 def _finding_evidence_status(statuses: List[str]) -> str:
     if not statuses:
         return "none"
-    for s in ("verified", "external", "unverifiable", "mismatch", "missing", "rejected"):
+    # A good citation must never mask a rejected/missing/mismatched citation.
+    for s in ("rejected", "missing", "mismatch", "unverifiable", "external", "verified"):
         if s in statuses:
             return s
     return "none"

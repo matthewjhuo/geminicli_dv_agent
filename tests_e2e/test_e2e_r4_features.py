@@ -64,6 +64,11 @@ def _resolve_render_run_report():
     ])
 
 
+import sys as _test_sys
+_test_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from approval_helpers import grant_memory
+
+
 class TestE2ER4Features(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp_ctx = tempfile.TemporaryDirectory(prefix="e2e_r4_")
@@ -251,6 +256,7 @@ class TestE2ER4Features(unittest.TestCase):
         self.assertEqual(p_ver.returncode, 0, f"memory verify failed: {p_ver.stderr}\n{p_ver.stdout}")
         self.assertEqual(json.loads(p_ver.stdout)["status"], "verified")
 
+        grant_memory(self, self.tmp, entry_id, None, "human:dv_lead", "APR-MEM-1")
         p_pro = run_cli(
             [
                 "--project-root", str(self.tmp),
@@ -377,6 +383,7 @@ class TestE2ER4Features(unittest.TestCase):
             }],
         )
         store.verify_entry(eid, cfg.project_id)
+        grant_memory(self, store, eid, cfg.project_id, "human:dv_lead", "APR-1")
         store.promote_to_confirmed(eid, cfg.project_id, approver="human:dv_lead", approval_id="APR-1")
 
         # Mutate temp copy of RTL

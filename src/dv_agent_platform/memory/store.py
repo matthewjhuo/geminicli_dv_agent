@@ -26,6 +26,8 @@ from typing import Any, Dict, List, Optional
 from ..errors import PromotionError, ProvenanceError
 from ..orchestrator.evidence import EvidenceVerifier
 from ..security.redact import redact
+from ..security.approval import ApprovalGate, ApprovalRequest, ApprovalFileApprover, approver_from_env
+from ..errors import ApprovalRequired
 
 MEMORY_KINDS = {"semantic", "episodic", "procedural", "evidence"}
 MEMORY_STATUSES = {"candidate", "verified", "confirmed", "rejected", "stale"}
@@ -55,19 +57,25 @@ def _cosine_token_similarity(query_tokens: List[str], doc_tokens: List[str]) -> 
 
 
 class MemoryStore:
-    def __init__(self, db_path: Path, project_root: Path, *, mode: str = "evolving"):
+    def __init__(self, db_path: Path, project_root: Path, *, mode: str = "evolving", approval_gate=None):
         if mode not in {"evolving", "frozen"}:
             raise ValueError(f"mode must be 'evolving' or 'frozen', got {mode!r}")
         self.db_path = Path(db_path)
         self.project_root = Path(project_root).resolve()
         self.mode = mode
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.approval_gate = approval_gate or ApprovalGate(approver_from_env())
         self.verifier = EvidenceVerifier(self.project_root)
-        self._init_db()
+        if mode == "frozen":
+            if not self.db_path.is_file():
+                raise FileNotFoundError(f"Frozen memory database not found: {self.db_path}")
+        else:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._init_db()
 
     @contextlib.contextmanager
     def _connect(self):
-        conn = sqlite3.connect(str(self.db_path))
+        conn = (sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)
+                if self.mode == "frozen" else sqlite3.connect(str(self.db_path)))
         conn.row_factory = sqlite3.Row
         try:
             with conn:
@@ -145,6 +153,8 @@ class MemoryStore:
         self._ensure_mutable()
         if kind not in MEMORY_KINDS:
             raise ValueError(f"Unknown memory kind {kind!r}; expected one of {sorted(MEMORY_KINDS)}")
+        if kind == "procedural" and verification_proof is not None:
+            self._validate_eda_proof(project_id, verification_proof)
         if not project_id.strip():
             raise ValueError("project_id is required")
         enriched_prov = self._enrich_provenance(provenance)
@@ -204,6 +214,7 @@ class MemoryStore:
                 f"ChipMEM gate blocked procedural skill distillation: unrecognized EDA tool {tool!r} "
                 f"(expected one of {sorted(EDA_VERIFICATION_TOOLS)})."
             )
+        proof = self._validate_eda_proof(project_id, eda_verification)
         if not applies_when or not applies_when.strip():
             raise PromotionError(
                 "Procedural skill requires an explicit applicability condition ('applies_when' / [iff <condition>])."
@@ -218,12 +229,6 @@ class MemoryStore:
             sections.append("## AVOID\n" + "\n".join(f"- {r.strip()}" for r in avoid_rules if r.strip()))
         content = "\n\n".join(sections)
 
-        proof = {
-            "tool": tool,
-            "passed": True,
-            "check_name": str(eda_verification.get("check_name") or ""),
-            "artifact": str(eda_verification.get("artifact") or ""),
-        }
         return self.add_candidate(
             project_id=project_id,
             kind="procedural",
@@ -234,6 +239,41 @@ class MemoryStore:
             applies_when=applies_when.strip(),
             verification_proof=proof,
         )
+
+    def _validate_eda_proof(self, project_id, proof):
+        artifact = proof.get("artifact")
+        expected = proof.get("sha256")
+        if not isinstance(artifact, str) or not artifact or not isinstance(expected, str):
+            raise PromotionError("EDA proof requires a local result artifact and its SHA-256")
+        target = (self.project_root / artifact).resolve()
+        if not target.is_relative_to(self.project_root) or not target.is_file():
+            raise PromotionError("EDA result artifact must be an existing project-scoped file")
+        raw = target.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != expected:
+            raise PromotionError("EDA artifact digest mismatch")
+        try:
+            doc = json.loads(raw)
+        except (ValueError, UnicodeError) as exc:
+            raise PromotionError("EDA result artifact must be UTF-8 JSON") from exc
+        if not isinstance(doc, dict) or doc.get("record_version") != "dv-eda-result/v1":
+            raise PromotionError("Unsupported EDA result record")
+        if (doc.get("project_id") != project_id or doc.get("tool") != proof.get("tool")
+                or not doc.get("check_name") or doc.get("check_name") != proof.get("check_name")
+                or doc.get("passed") is not True or type(doc.get("returncode")) is not int
+                or doc["returncode"] != 0 or doc.get("timed_out") is not False
+                or doc.get("execution_mode") != "real" or not doc.get("revision")):
+            raise PromotionError("EDA artifact must identify a completed successful real check for this project")
+        hashes = doc.get("source_hashes")
+        if not isinstance(hashes, dict) or not hashes:
+            raise PromotionError("EDA artifact requires source SHA-256 records")
+        for source, digest in hashes.items():
+            if not isinstance(source, str):
+                raise PromotionError("Invalid EDA source path")
+            path = (self.project_root / source).resolve()
+            if not path.is_relative_to(self.project_root) or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                raise PromotionError("EDA artifact cites missing, out-of-scope or changed source")
+        return {**proof, "artifact": str(target.relative_to(self.project_root)), "integrity_checked": True,
+                "attestation": "operator-supplied local record; integrity is not tool or identity authentication"}
 
     def get(self, entry_id: str, project_id: Optional[str] = None) -> Dict[str, Any]:
         with self._connect() as conn:
@@ -270,6 +310,8 @@ class MemoryStore:
             if status == "external" and not prov.get("verified_external", False):
                 all_ok = False
 
+        if entry.get("verification_proof"):
+            self._validate_eda_proof(project_id, entry["verification_proof"])
         new_status = "verified" if all_ok else "candidate"
         summary_note = "; ".join(notes)
         with self._connect() as conn:
@@ -300,6 +342,34 @@ class MemoryStore:
         if not approval_id or not approval_id.strip():
             raise PromotionError("A non-empty approval_id is required for auditability.")
 
+        # A human: label is metadata, not authentication. Require a separate
+        # trusted approval channel; default CLI/API execution denies promotion.
+        channel = self.approval_gate.approver
+        if isinstance(channel, ApprovalFileApprover):
+            if channel.path.resolve().is_relative_to(self.project_root):
+                raise PromotionError("Memory approval record must be outside the agent project")
+            records = [r for r in channel._load() if r.get("approval_id") == approval_id]
+            import math
+            if not records or not any(
+                isinstance(r.get("expires_at"), (int, float)) and not isinstance(r.get("expires_at"), bool)
+                and math.isfinite(r["expires_at"]) and r["expires_at"] > channel.clock()
+                and r.get("action") == "confirm_memory"
+                and r.get("scope") == {"entry_id": entry_id, "project_id": project_id}
+                for r in records
+            ):
+                raise PromotionError("Memory approval requires action, exact entry/project scope and finite future expiry")
+        try:
+            decision = self.approval_gate.require(ApprovalRequest(
+                category="memory_promotion", summary=f"Confirm memory {entry_id}",
+                action_id="confirm_memory", details={"entry_id": entry_id, "project_id": project_id}), approval_id=approval_id)
+        except ApprovalRequired as exc:
+            raise PromotionError(str(exc)) from exc
+        if decision.approver != approver:
+            raise PromotionError("Requested approver differs from the trusted approval decision")
+        self.verify_entry(entry_id, project_id)
+        if self.check_staleness(entry_id, project_id):
+            raise PromotionError("Memory source changed before confirmation")
+
         with self._connect() as conn:
             conn.execute(
                 """
@@ -315,6 +385,11 @@ class MemoryStore:
         """Returns True (and marks status='stale') if any cited local file's SHA-256 changed."""
         entry = self.get(entry_id, project_id=project_id)
         stale = False
+        if entry.get("verification_proof"):
+            try:
+                self._validate_eda_proof(project_id, entry["verification_proof"])
+            except PromotionError:
+                stale = True
         for prov in entry["provenance"]:
             src = str(prov.get("source", ""))
             expected_sha = prov.get("sha256")
@@ -324,7 +399,7 @@ class MemoryStore:
             if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha:
                 stale = True
                 break
-        if stale and entry["status"] == "confirmed":
+        if stale and entry["status"] == "confirmed" and self.mode != "frozen":
             with self._connect() as conn:
                 conn.execute(
                     "UPDATE memories SET status = 'stale', updated_at = ? WHERE entry_id = ? AND project_id = ?",

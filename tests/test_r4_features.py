@@ -24,6 +24,11 @@ from dv_agent_platform.orchestrator.reports import render_run_report  # noqa: E4
 from dv_agent_platform.orchestrator.workflows import BUILTIN_WORKFLOWS, build_graph  # noqa: E402
 
 
+import sys as _test_sys
+_test_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from approval_helpers import grant_memory
+
+
 class TestR4NewFeatures(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = Path(tempfile.mkdtemp(prefix="dv_r4_test_"))
@@ -122,6 +127,7 @@ class TestR4NewFeatures(unittest.TestCase):
         self.assertEqual(p1.returncode, 0, p1.stderr)
         eid = json.loads(p1.stdout)["entry_id"]
         self.assertEqual(run_m(["memory", "verify", eid]).returncode, 0)
+        env["DV_APPROVAL_FILE"] = str(grant_memory(self, self._tmp, eid, None, "human:lead", "A1"))
         self.assertEqual(run_m(["memory", "promote", eid, "--approver", "human:lead", "--approval-id", "A1"]).returncode, 0)
         p_q = run_m(["memory", "--query", "soft_clr"])
         self.assertEqual(p_q.returncode, 0)

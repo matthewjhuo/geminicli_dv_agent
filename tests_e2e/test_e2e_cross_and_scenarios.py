@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 
 from tests_e2e.e2e_helpers import (
+    cleanup_temporary_directory,
     HOOKS_DIR,
     POLICIES_DIR,
     REPO_ROOT,
@@ -85,13 +86,18 @@ def _company_profile() -> dict:
     }
 
 
+import sys as _test_sys
+_test_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from approval_helpers import grant_memory
+
+
 class TestE2ECrossAndScenarios(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp_ctx = tempfile.TemporaryDirectory(prefix="e2e_x_")
         self.tmp = Path(self._tmp_ctx.name)
 
     def tearDown(self) -> None:
-        self._tmp_ctx.cleanup()
+        cleanup_temporary_directory(self._tmp_ctx)
 
     # ------------------------------------------------------------------
     # Tier 3: Pairwise Cross-Feature Combinations (>= 6)
@@ -411,6 +417,7 @@ class TestE2ECrossAndScenarios(unittest.TestCase):
         self.assertEqual(p_add.returncode, 0, p_add.stderr)
         eid = json.loads(p_add.stdout)["entry_id"]
         self.assertEqual(run_cli(["--project-root", str(ws), "memory", "verify", eid], cwd=ws).returncode, 0)
+        grant_memory(self, ws, eid, "s3_proj", "human:dv_lead", "APR-S3")
         self.assertEqual(
             run_cli(["--project-root", str(ws), "memory", "promote", eid, "--approver", "human:dv_lead", "--approval-id", "APR-S3"], cwd=ws).returncode,
             0,

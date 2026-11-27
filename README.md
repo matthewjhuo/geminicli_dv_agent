@@ -23,8 +23,8 @@
 | **Level 1：標準化 DV 助手** | 階層式 `GEMINI.md` 自動載入；`.gemini/skills/*/SKILL.md` 自動發現與按需啟用 | 全域 DV 安全憲章、參數化專案 `GEMINI.md` 範本、8 大 DV 領域技能與檢查表（Testplan / UVM / SVA / Debug / Coverage / Formal / CDC-RDC / RAL） |
 | **Level 2：多代理系統** | `.gemini/agents/*.md` 嚴格 Schema 載入、`@dv-*` 委派、`tools` 白名單、`max_turns` / `timeout_mins` 限制 | 9 個專業 DV 子代理角色定義、最小權限工具矩陣、輸入需求與 `agent_output.schema.json` 結構化輸出契約 |
 | **Level 3：代理團隊協作** | `.gemini/commands/dv/*.toml` 自訂斜線命令（`/dv:triage`、`/dv:plan` 等） | Python `Orchestrator`（DAG 拓撲排程、有界並行池、本地檔案行號證據核驗與自動降級、衝突裁決、`@dv-review` 獨立審查與有界重試迴圈、原子化狀態持久化與恢復、Dry-Run） |
-| **Level 4：Agentic DV 平台** | `.gemini/policies/*.toml` 權限規則、`BeforeTool` / `AfterTool` Hooks、`settings.json` `mcpServers` | 無依賴 JSON-RPC stdio MCP 伺服器範本；VCS、Verdi（含 **BTTF SQLite `waves.db` 波形索引器**、Clock/Zero-Toggle Pruning 與 7 個確定性波形查詢／因果反查工具）、Perforce、Regression、ADO、JIRA 六大 Mock 優先轉接器（含 `adapters_validated` 真實環境門控與 **ChipMEM 貝氏工具失敗恢復建議**）；`ApprovalGate`；JSONL 稽核日誌與 Token 預算追蹤器 |
-| **Level 5：驗證閉環可信 AI** | 工作區目錄信任（`trustedFolders.json`）與 MCP 查詢整合 | SQLite 四層記憶庫（Semantic / Episodic / Procedural / Evidence）、`project_id` 專案隔離與餘弦相似度門檻檢索、**ChipMEM EDA-PASS-only 技能蒸餾**（`## DO`/`## AVOID` + `applies_when`、`evolving`/`frozen` 模式）、檔案 SHA-256 溯源、`Candidate → Verified → Human Confirmed` 晉升狀態機、陳舊（Stale）偵測、黃金評測集與 **Survey 五階段 RTL Mutation Oracle 評測階梯** |
+| **Level 4：Agentic DV 平台** | `.gemini/policies/*.toml` 權限規則、`BeforeTool` / `AfterTool` Hooks、`settings.json` `mcpServers` | 無依賴 JSON-RPC stdio MCP 伺服器範本；VCS、Verdi（含 **BTTF SQLite `waves.db` 波形索引器**、具名 Clock／Zero-Toggle Pruning 與 7 個波形索引／查詢入口（事件時間窗不代表因果證明））、Perforce、Regression、ADO、JIRA 六大 Mock 優先轉接器（含 `adapters_validated` 真實環境門控與 **ChipMEM 貝氏工具失敗恢復建議**）；`ApprovalGate`；JSONL 稽核日誌與 Token 預算追蹤器 |
+| **Level 5：驗證閉環可信 AI** | 工作區目錄信任（`trustedFolders.json`）與 MCP 查詢整合 | SQLite 四層記憶庫（Semantic / Episodic / Procedural / Evidence）、`project_id` 專案隔離與餘弦相似度門檻檢索、**需本地 EDA 結果紀錄與 SHA-256 的技能蒸餾**（`## DO`/`## AVOID` + `applies_when`、`evolving`/`frozen` 模式）、檔案 SHA-256 溯源、`Candidate → Verified → Human Confirmed` 晉升狀態機、陳舊（Stale）偵測、黃金評測集與 **自訂 Python 合成 FIFO mutation 評測（不提供 EDA signoff）** |
 
 ---
 
@@ -60,7 +60,7 @@ dv-agent-framework/
 
 ## 快速開始（Linux + VS Code Terminal）
 
-**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[完整貼上式部署包（`7ff1213` 最新版）](offline/paste-kit-7ff1213/README.md)：提供單檔與 11 段文字版本，包含完整框架（含 BTTF 波形 SQLite、ChipMEM 雙層記憶、GUARD+WikiSkill 演化護欄、Survey Mutation Oracle 評測階梯）與 Harness² 核心，附逐檔 SHA-256 校驗、離線測試與 Gemini CLI 專案安裝步驟。
+**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[修正版完整貼上式部署包（`6137a8a`）](offline/paste-kit-6137a8a/README.md)：193 個來源檔案、12 段文字，包含完整框架與 Harness² 核心，附逐檔 SHA-256、離線測試與 Gemini CLI 專案安裝步驟。歷史快照未包含本次全部修正；先閱讀[相容性與限制](docs/CORRECTNESS_REMEDIATION.md)。
 
 1. **預覽安裝（預設 Dry-Run，不修改任何檔案）**：
    ```bash
@@ -97,9 +97,11 @@ dv-agent-framework/
    # 連接真實 Gemini CLI（唯讀 plan 模式）對單一黃金案例執行演化
    python3 scripts/run_harness2_dv.py --mode gemini_cli --k 1 --tasks GOLD-TRIAGE-001
    ```
-   > 內建 `validate_dv_harness_safety()` 安全閘門與 **GUARD + WikiSkill 防退化護欄**（雙層檢查清單、Paired Regret、Mastered 規則鎖定、Soft-HURT 晉升閘門、`[iff <precondition>]` 範圍護欄與永不回滾 `wiki/` 知識與拒絕帳本），確保演化過程中不會削弱 Prompt-Injection 防火牆、`[APPROVAL REQUIRED]` 閘門、8 大核心 DV 技能，或寫入硬編碼路徑與密鑰。
+   > 每次 candidate 執行前會檢查安全標記、核心 skills 與新增規則的 `[iff]` scope；評分使用兩層檢查。`evaluate_candidate_promotion()`、paired regret 與 Wiki ledger 是本專案的選配 API，尚未替換外部 Harness² scheduler 的採用決策。Wiki 是一般本地檔案，沒有 OS 層不可竄改或不可回滾保證。這些演算法為本地實作，不宣稱等同外部論文或產品。
 
 進階部署與調校請參閱：
+- [本次正確性修正、相容性變更與剩餘限制](./docs/CORRECTNESS_REMEDIATION.md)
+- [執行完整性、續跑與預算邊界](./docs/EXECUTION_INTEGRITY.md)
 - [公司 TB 整合、離線部署與已知限制](./docs/COMPANY_TB_INTEGRATION.md)
 - [安裝指南 (`docs/INSTALLATION_GUIDE.md`)](./docs/INSTALLATION_GUIDE.md)
 - [遷移與真實工具鏈接軌指南 (`docs/MIGRATION_GUIDE.md`)](./docs/MIGRATION_GUIDE.md)

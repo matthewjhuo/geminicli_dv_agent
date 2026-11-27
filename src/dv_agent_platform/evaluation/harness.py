@@ -162,7 +162,8 @@ class EvaluationHarness:
         )
         base_report["evaluation_ladder"] = ladder
         base_report["mutation_kill_rate"] = ladder["mutation_kill_rate"]
-        base_report["signoff_ready"] = bool(
-            base_report["passed_cases"] == base_report["total_cases"] and ladder["signoff_ready"]
+        base_report["synthetic_ready"] = bool(
+            base_report["passed_cases"] == base_report["total_cases"] and ladder["synthetic_ready"]
         )
+        base_report["signoff_ready"] = False
         return base_report

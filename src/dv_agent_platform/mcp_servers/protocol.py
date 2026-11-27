@@ -8,15 +8,42 @@ when ``fence_outputs=True`` so downstream models treat adapter payloads as passi
 from __future__ import annotations
 
 import json
+import math
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, IO, List, Optional
 
 from ..errors import ApprovalRequired, ConfidentialityError, DVAgentError, ForbiddenOperation
-from ..security.redact import redact_obj
+from ..security.redact import redact, redact_obj
 from ..security.untrusted import wrap_untrusted
 
 PROTOCOL_VERSION = "2024-11-05"
+
+
+def validate_arguments(value: Any, schema: Dict[str, Any], path: str = "arguments") -> None:
+    """Validate the basic JSON Schema subset used by registered tool inputs."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{path} must be finite")
+    kind = schema.get("type")
+    valid = {
+        "object": isinstance(value, dict), "array": isinstance(value, list),
+        "string": isinstance(value, str), "integer": type(value) is int,
+        "number": type(value) in (int, float), "boolean": type(value) is bool,
+    }
+    if kind in valid and not valid[kind]:
+        raise ValueError(f"{path} must be {kind}")
+    if isinstance(value, dict):
+        for name in schema.get("required", []):
+            if name not in value:
+                raise ValueError(f"{path}.{name} is required")
+        for name, item in value.items():
+            if name in schema.get("properties", {}):
+                validate_arguments(item, schema["properties"][name], f"{path}.{name}")
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            validate_arguments(item, schema.get("items", {}), f"{path}[{index}]")
+    if "enum" in schema and value not in schema["enum"]:
+        raise ValueError(f"{path} has an unsupported value")
 
 
 @dataclass
@@ -53,12 +80,19 @@ class MCPServer:
         ]
 
     def handle_message(self, msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0" or not isinstance(msg.get("method"), str):
+            return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}}
         method = msg.get("method")
         msg_id = msg.get("id")
-        params = msg.get("params") or {}
+        if msg_id is not None and type(msg_id) not in (str, int):
+            return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid request id"}}
+        params = msg.get("params", {})
+        if not isinstance(params, dict):
+            return ({"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32602, "message": "params must be an object"}}
+                    if "id" in msg else None)
 
         # Notifications have no 'id' and expect no response
-        if msg_id is None:
+        if "id" not in msg:
             return None
 
         if method == "initialize":
@@ -77,7 +111,9 @@ class MCPServer:
             return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": self.list_tools()}}
         if method == "tools/call":
             tname = params.get("name", "")
-            targs = params.get("arguments") or {}
+            targs = params.get("arguments", {})
+            if not isinstance(tname, str):
+                return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32602, "message": "Tool name must be a string"}}
             spec = self._tools.get(tname)
             if spec is None:
                 return {
@@ -86,6 +122,7 @@ class MCPServer:
                     "error": {"code": -32601, "message": f"Unknown tool: {tname}"},
                 }
             try:
+                validate_arguments(targs, spec.input_schema)
                 raw_out = spec.handler(targs)
                 clean_out = redact_obj(raw_out)
                 serialized = json.dumps(clean_out, ensure_ascii=False, indent=2)
@@ -97,14 +134,18 @@ class MCPServer:
                     "id": msg_id,
                     "result": {"content": [{"type": "text", "text": text}], "isError": False},
                 }
-            except (ForbiddenOperation, ApprovalRequired, ConfidentialityError, DVAgentError) as exc:
+            except Exception as exc:
+                # Errors belong to this call; one missing file or bad argument must
+                # not tear down the long-lived stdio server.
+                detail = redact(f"[{type(exc).__name__}] {exc}")[:2000]
                 if self.logger:
-                    self.logger.log("mcp_tool_blocked", level="warning", server=self.name, tool=tname, error=str(exc))
+                    self.logger.log("mcp_tool_failed", level="warning", server=self.name, tool=tname, error=detail)
+                text = wrap_untrusted(detail, f"mcp:{self.name}/{tname}:error") if self.fence_outputs else detail
                 return {
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "result": {
-                        "content": [{"type": "text", "text": f"[{type(exc).__name__}] {exc}"}],
+                        "content": [{"type": "text", "text": text}],
                         "isError": True,
                     },
                 }
