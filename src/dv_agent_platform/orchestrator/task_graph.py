@@ -99,12 +99,15 @@ class TaskGraph:
     def upstream_agents(self, task_id: str) -> List[str]:
         return sorted(t for t in self.upstream(task_id) if self.tasks[t].kind == "agent")
 
+    def downstream(self, task_id: str) -> Set[str]:
+        return {tid for tid in self.tasks if task_id in self.upstream(tid)}
+
     def to_dict(self) -> Dict:
         return {
             "levels": self.levels,
             "tasks": [
                 {"id": t.id, "kind": t.kind, "agent": t.agent, "depends_on": t.depends_on,
-                 "objective": t.objective}
+                 "objective": t.objective, "max_retries": t.max_retries, "timeout_s": t.timeout_s}
                 for t in self.tasks.values()
             ],
         }

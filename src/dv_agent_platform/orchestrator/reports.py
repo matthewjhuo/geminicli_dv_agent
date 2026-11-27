@@ -50,7 +50,8 @@ def render_run_report(state_or_path: Union[Dict[str, Any], Path, str]) -> str:
     tasks = clean.get("tasks") or {}
     for tid in sorted(tasks.keys()):
         t = tasks[tid] or {}
-        agent = t.get("agent") or t.get("kind") or "task"
+        graph_task = next((item for item in clean.get("graph", {}).get("tasks", []) if item.get("id") == tid), {})
+        agent = t.get("agent") or graph_task.get("agent") or t.get("kind") or graph_task.get("kind") or "task"
         t_status = t.get("status", "unknown")
         summary = ""
         out = t.get("output")
@@ -63,7 +64,7 @@ def render_run_report(state_or_path: Union[Dict[str, Any], Path, str]) -> str:
         lines.extend(["", "## Aggregated Findings"])
         for f in findings:
             fid = f.get("id", "F")
-            ep = f.get("epistemic", "UNKNOWN")
+            ep = f.get("epistemic_effective", f.get("epistemic", "UNKNOWN"))
             claim = f.get("claim", "")
             lines.append(f"- `{fid}` [{ep}]: {claim}")
 

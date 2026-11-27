@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from ..errors import DVAgentError
 from ..security.redact import redact_obj
 
-TASK_STATES = {"pending", "running", "succeeded", "failed", "skipped", "blocked", "planned"}
+TASK_STATES = {"pending", "running", "succeeded", "failed", "skipped", "blocked", "planned", "needs_input"}
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 

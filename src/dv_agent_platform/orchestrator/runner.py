@@ -95,12 +95,14 @@ class Orchestrator:
             self.state_store.save(state)
 
             est = estimate_tokens(prompt) + 256
-            self.usage.check_budget(est)
+            reservation_id = None
             try:
+                reservation_id = self.usage.reserve(est)
                 res = self.backend.invoke(task.agent, prompt, task.id, timeout_s)
                 self.usage.record(
                     task.agent, task.id, res.input_tokens, res.output_tokens,
                     res.latency_s, model=res.model, estimated=res.estimated_tokens,
+                    reservation_id=reservation_id,
                 )
                 inj_hits = detect_injection(res.text)
                 for h in inj_hits:
@@ -111,8 +113,10 @@ class Orchestrator:
                 parsed = parse_and_validate(res.text, expected_agent=task.agent, expected_task=task.id)
                 tstate["output"] = parsed
                 tstate["error"] = None
-                tstate["status"] = "blocked" if parsed["status"] in {"blocked", "failed"} else "succeeded"
-                self.logger.log("task_succeeded", task_id=task.id, agent=task.agent, attempts=tstate["attempts"])
+                tstate["status"] = {"ok": "succeeded", "needs_input": "needs_input",
+                                    "blocked": "blocked", "failed": "failed"}[parsed["status"]]
+                self.logger.log("task_completed", task_id=task.id, agent=task.agent,
+                                status=tstate["status"], attempts=tstate["attempts"])
                 return parsed
             except BudgetExceeded:
                 tstate["status"] = "failed"
@@ -132,6 +136,8 @@ class Orchestrator:
                     tstate["status"] = "failed"
                     self.state_store.save(state)
                     raise
+            finally:
+                self.usage.release(reservation_id)
 
         raise last_err or DVAgentError(f"Task {task.id} failed")
 
@@ -176,6 +182,9 @@ class Orchestrator:
                 try:
                     fut.result()
                 except Exception as exc:  # noqa: BLE001
+                    tid = futs[fut]
+                    state["tasks"][tid]["status"] = "failed"
+                    state["tasks"][tid]["error"] = f"{type(exc).__name__}: {exc}"
                     errors.append(exc)
         self.state_store.save(state)
         if errors:
@@ -191,6 +200,7 @@ class Orchestrator:
         params = dict(params or {})
         rid = run_id or new_run_id(workflow_name)
         self.logger.run_id = rid
+        self.usage = UsageTracker(self.config.token_budget, self.config.pricing, logger=self.logger.child("usage"))
         state = self.state_store.create(rid, workflow_name, graph.to_dict(), params, dry_run=self.config.dry_run)
         if self.config.dry_run:
             for tid, task in graph.tasks.items():
@@ -212,10 +222,22 @@ class Orchestrator:
         self.logger.run_id = run_id
         tasks = [Task.from_dict(t) for t in state["graph"]["tasks"]]
         graph = TaskGraph(tasks)
-        for tstate in state["tasks"].values():
-            if tstate["status"] in {"failed", "planned", "skipped"}:
-                tstate["status"] = "pending"
-                tstate["error"] = None
+        self.usage = UsageTracker(self.config.token_budget, self.config.pricing, logger=self.logger.child("usage"))
+        self.usage.restore(state.get("usage"))
+        if state["status"] == "succeeded":
+            return state
+        invalidated = set()
+        for tid, tstate in state["tasks"].items():
+            if tstate["status"] != "succeeded":
+                invalidated.add(tid)
+                invalidated.update(graph.downstream(tid))
+        for tid in invalidated:
+            tstate = state["tasks"][tid]
+            tstate["status"] = "pending"
+            tstate["error"] = None
+            tstate["output"] = None
+        if any(graph.tasks[tid].kind == "aggregate" for tid in invalidated):
+            state["aggregate"] = None
         state["dry_run"] = False
         state["status"] = "running"
         self.state_store.save(state)
@@ -228,14 +250,26 @@ class Orchestrator:
                 for wave in graph.levels:
                     self._run_wave(wave, graph, state)
 
+                incomplete = {tid: task["status"] for tid, task in state["tasks"].items()
+                              if task["status"] != "succeeded"}
+                if incomplete:
+                    values = set(incomplete.values())
+                    state["status"] = "failed" if "failed" in values else (
+                        "needs_input" if "needs_input" in values else "blocked")
+                    state["notes"].append("Required tasks did not complete: " + json.dumps(incomplete, sort_keys=True))
+                    break
                 if not review_tasks:
-                    state["status"] = "succeeded"
+                    state["status"] = "needs_human" if (state.get("aggregate") or {}).get("needs_human") else "succeeded"
                     break
 
-                r_task = review_tasks[-1]
-                r_out = state["tasks"][r_task.id].get("output") or {}
-                verdict = r_out.get("review_verdict", "approve")
-                issues = list(r_out.get("review_issues") or [])
+                reviews = [state["tasks"][task.id].get("output") or {} for task in review_tasks]
+                verdicts = [out.get("review_verdict") for out in reviews]
+                if any(v not in {"approve", "revise", "reject"} for v in verdicts):
+                    state["status"] = "blocked"
+                    state["notes"].append("Required independent review verdict is missing")
+                    break
+                verdict = "reject" if "reject" in verdicts else ("revise" if "revise" in verdicts else "approve")
+                issues = [issue for out in reviews for issue in out.get("review_issues", [])]
                 state["review_rounds"] = round_idx + 1
                 state["review_history"].append({"round": round_idx + 1, "verdict": verdict, "issues": issues})
 
@@ -251,19 +285,21 @@ class Orchestrator:
                     break
 
                 # verdict == "revise": reset upstream producer tasks that feed aggregate/review
-                producers = graph.upstream_agents(r_task.id)
+                producers = sorted({producer for task in review_tasks for producer in graph.upstream_agents(task.id)})
                 target_producers = [
                     p for p in producers
                     if any(p in iss or (graph.tasks[p].agent or "") in iss for iss in issues)
                 ] or producers
+                invalidated = set(target_producers)
                 for pid in target_producers:
-                    state["tasks"][pid]["status"] = "pending"
+                    invalidated.update(graph.downstream(pid))
                     state["tasks"][pid]["feedback"] = list(state["tasks"][pid].get("feedback") or []) + (
-                        issues or [r_out.get("summary", "Revise findings with verified evidence")]
+                        issues or ["Revise findings with verified evidence"]
                     )
-                for tid, t in graph.tasks.items():
-                    if t.kind in {"aggregate", "review"}:
-                        state["tasks"][tid]["status"] = "pending"
+                for tid in invalidated:
+                    state["tasks"][tid].update(status="pending", output=None, error=None)
+                if any(graph.tasks[tid].kind == "aggregate" for tid in invalidated):
+                    state["aggregate"] = None
                 self.state_store.save(state)
         except Exception as exc:
             state["status"] = "failed"

@@ -100,6 +100,7 @@ dv-agent-framework/
    > 內建 `validate_dv_harness_safety()` 安全閘門與 **GUARD + WikiSkill 防退化護欄**（雙層檢查清單、Paired Regret、Mastered 規則鎖定、Soft-HURT 晉升閘門、`[iff <precondition>]` 範圍護欄與永不回滾 `wiki/` 知識與拒絕帳本），確保演化過程中不會削弱 Prompt-Injection 防火牆、`[APPROVAL REQUIRED]` 閘門、8 大核心 DV 技能，或寫入硬編碼路徑與密鑰。
 
 進階部署與調校請參閱：
+- [執行完整性、續跑與預算邊界](./docs/EXECUTION_INTEGRITY.md)
 - [公司 TB 整合、離線部署與已知限制](./docs/COMPANY_TB_INTEGRATION.md)
 - [安裝指南 (`docs/INSTALLATION_GUIDE.md`)](./docs/INSTALLATION_GUIDE.md)
 - [遷移與真實工具鏈接軌指南 (`docs/MIGRATION_GUIDE.md`)](./docs/MIGRATION_GUIDE.md)
