@@ -198,8 +198,8 @@ class TestLevel3Teamwork(unittest.TestCase):
         self.assertEqual(state["review_rounds"], 2)
         # formal ran: 2 attempts in round 1 (1 fail + 1 pass) + 1 attempt in round 2 = 3 total attempts
         self.assertEqual(state["tasks"]["formal"]["attempts"], 3)
-        # sva was not implicated in review_issues, so it stayed at 1 attempt!
-        self.assertEqual(state["tasks"]["sva"]["attempts"], 1)
+        # The dependent SVA audit must re-run after its formal input changes.
+        self.assertEqual(state["tasks"]["sva"]["attempts"], 2)
 
 
 if __name__ == "__main__":

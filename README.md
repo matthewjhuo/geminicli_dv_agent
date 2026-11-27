@@ -58,7 +58,7 @@ dv-agent-framework/
 
 ## 快速開始（Linux + VS Code Terminal）
 
-**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[完整貼上式部署包](offline/paste-kit-d8b0c90/README.md)：提供單檔與 10 段文字版本，包含完整框架與 Harness² 核心，附校驗、離線測試與 Gemini CLI 專案安裝步驟。
+**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[完整貼上式部署包](offline/README.md)：提供單檔與分段文字版本，包含完整框架與 Harness² 核心，附校驗、離線測試與 Gemini CLI 專案安裝步驟。
 
 1. **預覽安裝（預設 Dry-Run，不修改任何檔案）**：
    ```bash
@@ -97,6 +97,7 @@ dv-agent-framework/
    > 內建 `validate_dv_harness_safety()` 安全閘門，確保 Harness² 演化過程中不會移除 Prompt-Injection 防火牆、`[APPROVAL REQUIRED]` 閘門、8 大核心 DV 技能，或寫入硬編碼路徑與密鑰。
 
 進階部署與調校請參閱：
+- [執行完整性、續跑與預算邊界](./docs/EXECUTION_INTEGRITY.md)
 - [公司 TB 整合、離線部署與已知限制](./docs/COMPANY_TB_INTEGRATION.md)
 - [安裝指南 (`docs/INSTALLATION_GUIDE.md`)](./docs/INSTALLATION_GUIDE.md)
 - [遷移與真實工具鏈接軌指南 (`docs/MIGRATION_GUIDE.md`)](./docs/MIGRATION_GUIDE.md)

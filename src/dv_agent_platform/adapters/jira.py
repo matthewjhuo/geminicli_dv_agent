@@ -11,13 +11,13 @@ class JIRAAdapter(BaseAdapter):
     name = "jira"
 
     def get_issue(self, key: str) -> Dict[str, Any]:
-        _ = self.is_mock
+        self._require_mock()
         issues = self._load_mock_infra().get("jira", {}).get("issues", {})
         self.logger.log("jira_get_issue", key=key)
         return issues.get(key, {"key": key, "status": "not_found"})
 
     def search_issues(self, query: str = "") -> List[Dict[str, Any]]:
-        _ = self.is_mock
+        self._require_mock()
         issues = list(self._load_mock_infra().get("jira", {}).get("issues", {}).values())
         q = (query or "").lower()
         matched = [i for i in issues if not q or q in str(i).lower()]
@@ -30,6 +30,7 @@ class JIRAAdapter(BaseAdapter):
         details = {"project_key": project_key, "summary": summary, "external_cloud": external_cloud}
         if is_dry:
             return {"status": "dry_run", "requires_approval": True, **details}
+        self._require_mock()
         self._check_outbound_confidentiality(external_cloud, f"jira://{project_key}")
         decision = self._require_approval("ticket_write", f"File JIRA defect in {project_key}: {summary}", details, approval_id)
         mock = self.is_mock

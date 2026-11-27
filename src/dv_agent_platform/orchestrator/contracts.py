@@ -30,6 +30,10 @@ VERDICTS = {"approve", "revise", "reject"}
 _FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.S)
 
 
+def _in_enum(value: Any, allowed) -> bool:
+    return isinstance(value, str) and value in allowed
+
+
 def extract_json_block(text: str) -> Dict[str, Any]:
     if isinstance(text, dict):
         return text
@@ -66,15 +70,15 @@ def validate_agent_output(obj: Any, expected_agent: str = None, expected_task: s
         return errors
     if obj["contract_version"] != CONTRACT_VERSION:
         errors.append("contract_version must be " + CONTRACT_VERSION)
-    if obj["agent"] not in AGENTS:
+    if not _in_enum(obj["agent"], AGENTS):
         errors.append(f"unknown agent {obj['agent']!r}")
     if expected_agent and obj["agent"] != expected_agent:
         errors.append(f"agent mismatch: expected {expected_agent}, got {obj['agent']}")
     if expected_task and obj["task_id"] != expected_task:
         errors.append(f"task_id mismatch: expected {expected_task}, got {obj['task_id']}")
-    if obj["status"] not in STATUSES:
+    if not _in_enum(obj["status"], STATUSES):
         errors.append(f"invalid status {obj['status']!r}")
-    if "classification" in obj and obj["classification"] not in CLASSIFICATIONS:
+    if "classification" in obj and not _in_enum(obj["classification"], CLASSIFICATIONS):
         errors.append(f"invalid classification {obj['classification']!r}")
     if not isinstance(obj["findings"], list):
         errors.append("findings must be a list")
@@ -86,10 +90,13 @@ def validate_agent_output(obj: Any, expected_agent: str = None, expected_task: s
             for key in ("id", "claim", "epistemic", "confidence", "evidence"):
                 if key not in f:
                     errors.append(f"findings[{i}] missing '{key}'")
-            if f.get("epistemic") not in EPISTEMIC:
+            for key in ("id", "claim"):
+                if not isinstance(f.get(key), str):
+                    errors.append(f"findings[{i}].{key} must be a string")
+            if not _in_enum(f.get("epistemic"), EPISTEMIC):
                 errors.append(f"findings[{i}].epistemic invalid")
             conf = f.get("confidence")
-            if not isinstance(conf, (int, float)) or not 0 <= conf <= 1:
+            if type(conf) not in (int, float) or not 0 <= conf <= 1:
                 errors.append(f"findings[{i}].confidence must be within [0,1]")
             ev = f.get("evidence")
             if not isinstance(ev, list):
@@ -98,8 +105,15 @@ def validate_agent_output(obj: Any, expected_agent: str = None, expected_task: s
                 if f.get("epistemic") == "CONFIRMED" and not ev:
                     errors.append(f"findings[{i}] is CONFIRMED but has no evidence")
                 for j, e in enumerate(ev):
-                    if not isinstance(e, dict) or not e.get("source"):
+                    if not isinstance(e, dict) or not isinstance(e.get("source"), str) or not e["source"]:
                         errors.append(f"findings[{i}].evidence[{j}] missing 'source'")
+                        continue
+                    for key in ("line_start", "line_end"):
+                        if key in e and (type(e[key]) is not int or e[key] < 1):
+                            errors.append(f"findings[{i}].evidence[{j}].{key} must be a positive integer")
+                    for key in ("revision", "excerpt", "sim_time"):
+                        if key in e and not isinstance(e[key], str):
+                            errors.append(f"findings[{i}].evidence[{j}].{key} must be a string")
     if not isinstance(obj["open_questions"], list):
         errors.append("open_questions must be a list")
     if not isinstance(obj["proposed_actions"], list):
@@ -109,11 +123,19 @@ def validate_agent_output(obj: Any, expected_agent: str = None, expected_task: s
             if not isinstance(a, dict):
                 errors.append(f"proposed_actions[{i}] must be an object")
                 continue
-            if a.get("type") not in ACTION_TYPES:
+            if not _in_enum(a.get("type"), ACTION_TYPES):
                 errors.append(f"proposed_actions[{i}].type invalid")
-            if a.get("type") in GATED_ACTIONS and a.get("requires_approval") is not True:
+            if not isinstance(a.get("description"), str) or type(a.get("requires_approval")) is not bool:
+                errors.append(f"proposed_actions[{i}] requires a string description and boolean requires_approval")
+            if _in_enum(a.get("type"), GATED_ACTIONS) and a.get("requires_approval") is not True:
                 errors.append(f"proposed_actions[{i}] of type {a.get('type')} must set requires_approval=true")
-    if obj.get("agent") == "dv-review" and obj.get("review_verdict") not in VERDICTS:
+    for name in ("task_id", "summary"):
+        if not isinstance(obj.get(name), str):
+            errors.append(f"{name} must be a string")
+    for name in ("open_questions", "review_issues", "security_alerts"):
+        if name in obj and (not isinstance(obj[name], list) or any(not isinstance(v, str) for v in obj[name])):
+            errors.append(f"{name} must be a list of strings")
+    if obj.get("agent") == "dv-review" and not _in_enum(obj.get("review_verdict"), VERDICTS):
         errors.append("dv-review output must include review_verdict approve|revise|reject")
     return errors
 

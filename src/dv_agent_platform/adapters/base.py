@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from ..config import FrameworkConfig
-from ..errors import AdapterNotValidated, ConfidentialityError, ForbiddenOperation, ConfigError
+from ..errors import AdapterNotValidated, ConfidentialityError, ForbiddenOperation, ConfigError, UnsupportedOperation
 from ..security.approval import ApprovalGate, ApprovalRequest
 from ..security.command_guard import classify_command
 from ..security.redact import redact
@@ -98,6 +98,13 @@ class BaseAdapter:
                           approval_id: Optional[str] = None):
         req = ApprovalRequest(category=category, summary=summary, details=details)
         return self.approval_gate.require(req, approval_id=approval_id)
+
+    def _require_mock(self) -> None:
+        if not self.is_mock:
+            raise UnsupportedOperation(
+                f"Real {self.name} integration is not implemented. Configure a site adapter; "
+                "adapters_validated alone does not implement a service connection."
+            )
 
     def _check_outbound_confidentiality(self, external: bool, target: str) -> None:
         if external and not self.config.allow_external_upload:

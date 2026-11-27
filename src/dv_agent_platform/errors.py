@@ -49,6 +49,10 @@ class AdapterNotValidated(DVAgentError):
     """Real-tool mode requested for an adapter not yet validated in this environment."""
 
 
+class UnsupportedOperation(DVAgentError):
+    """The requested real integration is not implemented; never report mock success."""
+
+
 class ProvenanceError(DVAgentError):
     pass
 
