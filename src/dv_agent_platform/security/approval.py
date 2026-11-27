@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ..errors import ApprovalRequired
 
 GATED_CATEGORIES = {
+    "memory_promotion",    # trusted entry/project-scoped human confirmation
     "simulation",          # VCS compile/run, regression launch
     "waveform_extraction", # Verdi batch (license consumption)
     "coverage",            # URG report generation

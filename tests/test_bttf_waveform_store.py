@@ -42,7 +42,8 @@ class TestBTTFWaveformStore(unittest.TestCase):
         self.assertEqual(stats_pruned["pruned_clock_signals"], 1)
         self.assertEqual(stats_pruned["pruned_zero_toggle_signals"], 2)
         self.assertEqual(stats_pruned["active_signal_count"], 5)
-        self.assertEqual(stats_pruned["active_toggle_coverage_preserved"], 1.0)
+        self.assertIsNone(stats_pruned["active_toggle_coverage_preserved"])
+        self.assertIn("not independently measured", stats_pruned["coverage_limitations"])
         self.assertGreater(stats_pruned["change_reduction_pct"], 50.0)
         self.assertLess(stats_pruned["stored_change_count"], stats_raw["stored_change_count"])
 

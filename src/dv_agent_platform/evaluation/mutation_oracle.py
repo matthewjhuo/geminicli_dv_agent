@@ -1,13 +1,8 @@
-"""Survey-inspired Evaluation Ladder: RTL Mutation / Fault-Injection Oracle Verifier.
+"""Custom offline mutation demonstration using a built-in Python FIFO model.
 
-Implements the 5-stage Verification Evaluation Ladder from ``2610.10580.pdf`` (Fig. 4):
-1. ``syntax_and_structure``     – structural SVA/RTL integrity check
-2. ``simulation_cycle_trace``   – deterministic cycle-accurate golden reference simulation
-3. ``coverage_and_non_vacuity`` – proves assertion antecedents genuinely fire (non-vacuous)
-4. ``oracle_mutation_strength`` – injects deterministic RTL bugs (mutants) and computes
-                                  Mutation Kill Rate to distinguish strong oracles from
-                                  weak/vacuous assertions
-5. ``signoff_readiness``        – aggregates all 4 stages into a grounded verdict
+Recognizes a narrow set of SVA text patterns after comment removal. Does not compile
+or execute SVA, mutate an input RTL design, prove non-vacuity, or grant signoff.
+The five-stage presentation is an evaluation aid, not an external product integration.
 """
 
 from __future__ import annotations
@@ -188,6 +183,7 @@ class OracleCheckResult:
 
 def parse_sva_structure(sva_text: str) -> Dict[str, Any]:
     """Stage 1: lightweight structural inspection of SVA assertions & cover properties."""
+    sva_text = re.sub(r"/\*[\s\S]*?\*/|//[^\n]*", " ", sva_text)
     asserts = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*assert\s+property\s*\(([\s\S]*?)\)\s*(?:else|;)", sva_text)
     covers = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*cover\s+property\s*\(([\s\S]*?)\)\s*;", sva_text)
     has_module = bool(re.search(r"\bmodule\b", sva_text)) and bool(re.search(r"\bendmodule\b", sva_text))
@@ -314,7 +310,11 @@ def run_mutation_oracle_ladder(
     min_kill_rate: float = 0.6,
 ) -> Dict[str, Any]:
     """Run all 5 Evaluation Ladder stages on an SVA/oracle artifact against ``axi_fifo`` mutants."""
-    # Stage 1: Syntax & structure
+    if isinstance(min_kill_rate, bool) or not isinstance(min_kill_rate, (int, float)) or not 0 <= min_kill_rate <= 1:
+        raise ValueError("min_kill_rate must be finite and between 0 and 1")
+    if mutants is not None and not mutants:
+        raise ValueError("At least one mutant is required")
+    # Stage 1: Pattern inspection only; this is not an SV syntax check.
     structure = parse_sva_structure(sva_text)
     stage1_ok = bool(structure["syntax_ok"])
 
@@ -358,12 +358,18 @@ def run_mutation_oracle_ladder(
     stage4_ok = bool(golden_clean and kill_rate >= float(min_kill_rate))
 
     # Stage 5: Signoff Readiness
-    signoff_ready = bool(stage1_ok and golden_clean and stage3_ok and stage4_ok)
+    synthetic_ready = bool(stage1_ok and golden_clean and stage3_ok and stage4_ok)
+    signoff_ready = False  # A Python pattern-based demonstration cannot grant EDA signoff.
     return {
-        "ladder_version": "dv-eval-ladder/v1",
+        "ladder_version": "dv-eval-ladder/v2",
+        "execution_mode": "synthetic_python",
+        "synthetic": True,
+        "synthetic_ready": synthetic_ready,
+        "limitations": "Built-in FIFO Python model and recognized SVA patterns only; no SV compiler, property evaluation, RTL simulation, formal proof or signoff. Cover hits are synthetic scenario hits, not execution of the supplied cover expression.",
         "stages": {
             "1_syntax_and_structure": {
                 "passed": stage1_ok,
+                "validation_kind": "regex_structure_only",
                 "assertion_count": structure["assertion_count"],
                 "cover_count": structure["cover_count"],
             },
@@ -390,7 +396,7 @@ def run_mutation_oracle_ladder(
             },
             "5_signoff_readiness": {
                 "passed": signoff_ready,
-                "verdict": "SIGNOFF_READY" if signoff_ready else "ORACLE_GAP_DETECTED",
+                "verdict": "SYNTHETIC_DEMO_PASS" if synthetic_ready else "SYNTHETIC_ORACLE_GAP",
             },
         },
         "mutation_kill_rate": kill_rate,

@@ -52,6 +52,11 @@ def _agent_resp(agent: str, task_id: str, classification: str, source: str,
     return d
 
 
+import sys as _test_sys
+_test_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from approval_helpers import grant_memory
+
+
 class TestLevel5GroundedAI(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = Path(tempfile.mkdtemp(prefix="dv_l5_test_"))
@@ -122,6 +127,7 @@ class TestLevel5GroundedAI(unittest.TestCase):
             self.store.promote_to_confirmed(eid, "proj_alpha", approver="agent:dv-review", approval_id="APR-MEM-1")
 
         # 5) Explicit human approval succeeds -> transitions to 'confirmed'
+        grant_memory(self, self.store, eid, "proj_alpha", "human:dv_lead", "APR-MEM-1")
         confirmed = self.store.promote_to_confirmed(eid, "proj_alpha", approver="human:dv_lead", approval_id="APR-MEM-1")
         self.assertEqual(confirmed["status"], "confirmed")
 

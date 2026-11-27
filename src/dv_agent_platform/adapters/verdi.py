@@ -202,8 +202,8 @@ class VerdiAdapter(BaseAdapter):
         self, db_path: str, signal_name: str, time: int, scope: Optional[str] = None
     ) -> Dict[str, Any]:
         store = self._open_wave_store(db_path)
-        res = store.get_value_at_time(signal_name, int(time), scope=scope)
-        self.logger.log("verdi_wave_value_at_time", db_path=db_path, signal=res["signal"], time=int(time))
+        res = store.get_value_at_time(signal_name, time, scope=scope)
+        self.logger.log("verdi_wave_value_at_time", db_path=db_path, signal=res["signal"], time=time)
         return res
 
     def get_first_time_of_value(
@@ -255,7 +255,7 @@ class VerdiAdapter(BaseAdapter):
     ) -> Dict[str, Any]:
         store = self._open_wave_store(db_path)
         res = store.backward_trace_window(
-            int(violation_time),
+            violation_time,
             list(signals),
             window_before=int(window_before),
             scope=scope,
@@ -264,7 +264,7 @@ class VerdiAdapter(BaseAdapter):
         self.logger.log(
             "verdi_wave_backward_trace",
             db_path=db_path,
-            violation_time=int(violation_time),
+            violation_time=violation_time,
             events=len(res["causal_timeline"]),
         )
         return res

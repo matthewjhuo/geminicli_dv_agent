@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         gemini_model=args.model,
         harness2_dir=args.harness2_dir,
     )
+    args.output = adapter.output_root
     proposer = DVOfflineProposer(adapter.spec.channels["proposer"])
     modes = ("agg", "seq") if args.recursion == "both" else (mode_token(args.recursion),)
 

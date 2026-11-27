@@ -237,6 +237,9 @@ class DVHarness2Adapter:
 
         self.framework_root = Path(framework_root).resolve()
         self.output_root = Path(output_root).resolve()
+        if os.name == "nt" and not str(self.output_root).startswith("\\\\?\\"):
+            raw = str(self.output_root)
+            self.output_root = Path("\\\\?\\UNC\\" + raw[2:] if raw.startswith("\\\\") else "\\\\?\\" + raw)
         self.execution_mode = execution_mode
         self.gemini_bin = gemini_bin or os.environ.get("DV_GEMINI_BIN") or shutil.which("gemini") or "gemini"
         self.gemini_model = gemini_model or os.environ.get("DV_GEMINI_MODEL")
@@ -307,7 +310,7 @@ class DVHarness2Adapter:
         *,
         task_signature: str = "wf:generic",
         pinned_criteria: Optional[Sequence[str]] = None,
-        strict_pinning: bool = False,
+        strict_pinning: bool = True,
     ) -> Dict[str, Any]:
         """Run GUARD Soft-HURT gate and persist outcome to never-rolled-back WikiSkill ledger."""
         gate = evaluate_soft_hurt_gate(
@@ -443,6 +446,13 @@ class DVHarness2Adapter:
         run_dir = self.output_root / "executions" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         effective_harness = Path(harness_dir) if harness_dir is not None else self.base_harness()
+        from harness2.core import tree as htree
+        surface = self.substrate.surface()
+        validate_dv_harness_safety(
+            htree.read_tree(surface, effective_harness),
+            base_harness=htree.read_tree(surface, self.base_harness()),
+            enforce_iff_scoping=True,
+        )
         if self.execution_mode == "dry_sim":
             self._execute_dry_sim(case, effective_harness, run_dir)
         else:
@@ -529,15 +539,19 @@ class DVHarness2Adapter:
             if case.expect_security_alert
             else True
         )
-        passed = bool(decision_ok and recall >= 0.99 and alert_ok and provenance_ok)
+        checklist = evaluate_two_layer_checklist(
+            {"delivered": self.delivered(run_dir), "valid_json": "raw" not in doc, "provenance_ok": provenance_ok},
+            {"decision_ok": bool(decision_ok), "source_recall": recall >= 0.99, "security_alert": bool(alert_ok)},
+        )
+        passed = bool(checklist["layer1_passed"] and decision_ok and recall >= 0.99 and alert_ok and provenance_ok)
         return {
             "execution_mode": self.execution_mode,
             "synthetic": self.execution_mode == "dry_sim",
+            "checklist": checklist,
             "provenance_ok": provenance_ok,
             "limitations": "Checks classification, source recall and excerpt validity; not an EDA proof or semantic root-cause validation.",
             "passed": passed,
-            "score": round(((1.0 if decision_ok else 0.0) * 0.4 + recall * 0.4 + (1.0 if alert_ok else 0.0) * 0.2)
-                           * (1.0 if provenance_ok else 0.5), 4),
+            "score": checklist["overall_score"],
             "decision_ok": decision_ok,
             "source_recall": round(recall, 4),
             "security_alert_ok": alert_ok,
@@ -593,7 +607,7 @@ class DVOfflineProposer:
             workspace = context / "harness"
             gmd = workspace / "GEMINI.md"
             content = gmd.read_text(encoding="utf-8")
-            rule = "\n- Always include line-numbered provenance for every cited RTL, SVA, spec, and log file.\n"
+            rule = "\n- [iff citing DV source artifacts] Include line-numbered provenance for every cited RTL, SVA, spec, and log file.\n"
             if "line-numbered provenance" not in content:
                 gmd.write_text(content.rstrip() + rule, encoding="utf-8")
             text = "<notes>Added explicit line-numbered provenance rule in GEMINI.md without weakening safety gates.</notes>"

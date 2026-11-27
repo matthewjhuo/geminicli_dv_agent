@@ -50,7 +50,8 @@ class TestMutationOracleLadder(unittest.TestCase):
         self.assertFalse(mut_map["M2_OVERFLOW_WR_ON_FULL"])
         self.assertFalse(mut_map["M3_RESET_STUCK_VALID"])
         self.assertAlmostEqual(report["mutation_kill_rate"], 0.6)
-        self.assertTrue(report["signoff_ready"])
+        self.assertFalse(report["signoff_ready"])
+        self.assertTrue(report["synthetic_ready"])
 
     def test_02_weak_and_vacuous_sva_oracles_are_caught_by_ladder(self) -> None:
         # 1) Vacuous tautology assertion passes golden RTL but gets 0% kill rate + vacuous flag!
@@ -97,7 +98,8 @@ endmodule
         full_rep = run_mutation_oracle_ladder(full_sva, include_scoreboard_integrity=True, min_kill_rate=1.0)
         self.assertEqual(full_rep["stages"]["4_oracle_mutation_strength"]["killed_mutants"], len(MUTANT_CATALOG))
         self.assertEqual(full_rep["mutation_kill_rate"], 1.0)
-        self.assertTrue(full_rep["signoff_ready"])
+        self.assertFalse(full_rep["signoff_ready"])
+        self.assertTrue(full_rep["synthetic_ready"])
 
         # Verify EvaluationHarness.evaluate_with_ladder integration
         cfg = FrameworkConfig.load(project_root=self._tmp)
@@ -138,7 +140,8 @@ endmodule
         res = h.evaluate_with_ladder(cases, include_scoreboard_integrity=True, min_kill_rate=0.8)
         self.assertEqual(res["passed_cases"], 1)
         self.assertGreaterEqual(res["mutation_kill_rate"], 0.8)
-        self.assertTrue(res["signoff_ready"])
+        self.assertFalse(res["signoff_ready"])
+        self.assertTrue(res["synthetic_ready"])
 
 
 if __name__ == "__main__":

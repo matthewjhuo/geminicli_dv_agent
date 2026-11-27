@@ -8,6 +8,7 @@ when ``fence_outputs=True`` so downstream models treat adapter payloads as passi
 from __future__ import annotations
 
 import json
+import math
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, IO, List, Optional
@@ -21,6 +22,8 @@ PROTOCOL_VERSION = "2024-11-05"
 
 def validate_arguments(value: Any, schema: Dict[str, Any], path: str = "arguments") -> None:
     """Validate the basic JSON Schema subset used by registered tool inputs."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{path} must be finite")
     kind = schema.get("type")
     valid = {
         "object": isinstance(value, dict), "array": isinstance(value, list),

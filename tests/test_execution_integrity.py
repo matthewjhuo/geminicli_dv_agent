@@ -36,6 +36,11 @@ def response(agent, task, status="ok", verdict=None):
     return result
 
 
+import sys as _test_sys
+_test_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from approval_helpers import grant_memory
+
+
 class ExecutionIntegrity(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -272,6 +277,7 @@ class ExecutionIntegrity(unittest.TestCase):
         eid = store.add_candidate(cfg.project_id, "semantic", "pipeline", "check pipeline reset",
             [{"source": "rtl.sv", "revision": "r1", "line_start": 1}])
         store.verify_entry(eid, cfg.project_id)
+        grant_memory(self, store, eid, cfg.project_id, "human:tester", "A1")
         store.promote_to_confirmed(eid, cfg.project_id, "human:tester", "A1")
         graph = TaskGraph([Task("rtl", agent="dv-rtl", objective="pipeline reset")])
         state = _orchestrator(cfg, None).run_graph("memory-context", graph)

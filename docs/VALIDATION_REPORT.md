@@ -1,5 +1,7 @@
 # 驗證報告（Validation Report）
 
+> 歷史驗證紀錄：不代表本次版本或公司環境已驗證。最新狀態請見 IMPLEMENTATION_STATUS.md 與 docs/CORRECTNESS_REMEDIATION.md。
+
 > 執行完整性改進輪次新增 22 項回歸測試。當前本機 Windows / Python 3.13：
 > 單元測試 82 項（80 通過、2 項選配整合略過），離線 E2E 73 項通過。
 > 測試涵蓋範圍和無法保證的邊界見 [執行完整性](EXECUTION_INTEGRITY.md)。

@@ -82,7 +82,7 @@ class BaseAdapter:
         self.approval_gate = approval_gate or ApprovalGate()
         self.logger = logger or StructuredLogger(config.logs_dir / "adapters.jsonl", component=f"adapter.{self.name}")
         self.subprocess_runner = subprocess_runner
-        self.statistical_memory = statistical_memory
+        self.statistical_memory = statistical_memory or StatisticalToolMemory(config.state_dir / "tool_stats.db")
         self._failure_streaks: Dict[tuple[str, str], int] = {}
 
     def _adapter_cfg(self) -> Dict[str, Any]:
@@ -256,10 +256,10 @@ class BaseAdapter:
         advisory: Optional[Dict[str, Any]] = None
         if self.statistical_memory is not None:
             cmd_key = f"{self.name}:{Path(cmd_list[0]).name.lower()}"
-            succeeded = int(raw_res.returncode) == 0 and not bool(raw_res.timed_out)
             err_class = classify_eda_error(
                 cmd_key, int(raw_res.returncode), clean_out, clean_err, bool(raw_res.timed_out)
             )
+            succeeded = int(raw_res.returncode) == 0 and not bool(raw_res.timed_out) and err_class == "none"
             streak_key = (cmd_key, err_class)
             if succeeded:
                 # Record success for any active error streak on this cmd and reset streaks
