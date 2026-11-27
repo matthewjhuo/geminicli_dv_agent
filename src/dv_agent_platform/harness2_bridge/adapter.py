@@ -18,6 +18,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..evaluation.harness import EvaluationHarness, GoldenCase
+from .guard_wiki import (
+    WikiPattern,
+    WikiSkillLedger,
+    compute_paired_regret,
+    evaluate_soft_hurt_gate,
+    evaluate_two_layer_checklist,
+    route_task_signature,
+    validate_guard_scoping,
+)
 
 CORE_DV_SKILLS: tuple[str, ...] = (
     "dv-testplan",
@@ -132,11 +141,17 @@ def build_gemini_dv_surface():
     )
 
 
-def validate_dv_harness_safety(harness: Mapping[str, str]) -> None:
+def validate_dv_harness_safety(
+    harness: Mapping[str, str],
+    *,
+    base_harness: Optional[Mapping[str, str]] = None,
+    enforce_iff_scoping: bool = False,
+) -> None:
     """Hard DV safety & portability gate invoked on every candidate harness tree.
 
     Raises ``ValueError`` with actionable feedback whenever a proposed edit weakens
-    security boundaries, drops a core DV skill, or embeds paths/secrets.
+    security boundaries, drops a core DV skill, embeds paths/secrets, or (when
+    ``enforce_iff_scoping=True``) introduces unscoped GUARD rules / ``[always]`` triggers.
     """
     errors: List[str] = []
 
@@ -169,6 +184,9 @@ def validate_dv_harness_safety(harness: Mapping[str, str]) -> None:
             if spat.search(content):
                 errors.append(f"Potential embedded secret found in {rel}")
                 break
+
+    if enforce_iff_scoping:
+        errors.extend(validate_guard_scoping(base_harness or {}, harness))
 
     if errors:
         raise ValueError(" | ".join(errors))
@@ -224,6 +242,7 @@ class DVHarness2Adapter:
         self.gemini_model = gemini_model or os.environ.get("DV_GEMINI_MODEL")
         self.substrate = GeminiCliSubstrate()
         self.execution_count = 0
+        self.wiki_ledger = WikiSkillLedger(self.output_root / "wiki")
 
         dataset_path = self.framework_root / "evaluation" / "golden" / "dv_golden_cases.json"
         all_cases = EvaluationHarness.load_golden_dataset(dataset_path)
@@ -273,6 +292,37 @@ class DVHarness2Adapter:
 
     def domain_of(self, task_id: str) -> str:
         return "soc_dv"
+
+    def task_signature_of(self, task_id: str) -> str:
+        """GUARD pre-execution task signature routing isolating workflow-specific rules."""
+        case = self._cases[task_id]
+        return route_task_signature(case.workflow)
+
+    def evaluate_candidate_promotion(
+        self,
+        candidate_id: str,
+        diff_summary: str,
+        baseline_scores: Mapping[str, float],
+        candidate_scores: Mapping[str, float],
+        *,
+        task_signature: str = "wf:generic",
+        pinned_criteria: Optional[Sequence[str]] = None,
+        strict_pinning: bool = False,
+    ) -> Dict[str, Any]:
+        """Run GUARD Soft-HURT gate and persist outcome to never-rolled-back WikiSkill ledger."""
+        gate = evaluate_soft_hurt_gate(
+            baseline_scores,
+            candidate_scores,
+            pinned_criteria=pinned_criteria,
+            strict_pinning=strict_pinning,
+        )
+        audit = self.wiki_ledger.record_proposal_outcome(
+            candidate_id=candidate_id,
+            diff_summary=diff_summary,
+            gate_result=gate,
+            task_signature=task_signature,
+        )
+        return {**gate, "audit": audit}
 
     def task_prompt(self, task_id: str) -> str:
         case = self._cases[task_id]

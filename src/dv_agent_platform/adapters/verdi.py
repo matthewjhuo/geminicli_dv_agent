@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
+from ..dv_tools.waveform_store import WaveformStore, ingest_fsdb_samples, ingest_vcd
 from .base import BaseAdapter
 
 
@@ -129,3 +130,141 @@ class VerdiAdapter(BaseAdapter):
             "samples": samples,
             "stderr": res.stderr,
         }
+
+    def index_vcd_to_sqlite(
+        self,
+        vcd_path: str,
+        db_path: Optional[str] = None,
+        *,
+        prune_clocks: bool = True,
+        prune_zero_toggle: bool = True,
+    ) -> Dict[str, Any]:
+        """Build a BTTF SQLite waveform index (``waves.db``) from a project-scoped VCD file."""
+        src = self._resolve_project_file(vcd_path)
+        if db_path:
+            dst = self._resolve_project_file(db_path)
+        else:
+            dst = (self.config.state_dir / "waveforms" / f"{src.stem}.waves.db").resolve()
+            dst.relative_to(self.config.project_root)
+        stats = ingest_vcd(
+            src,
+            dst,
+            prune_clocks=bool(prune_clocks),
+            prune_zero_toggle=bool(prune_zero_toggle),
+        )
+        rel_db = dst.relative_to(self.config.project_root).as_posix()
+        rel_vcd = src.relative_to(self.config.project_root).as_posix()
+        self.logger.log("verdi_index_vcd", vcd_path=rel_vcd, db_path=rel_db, **stats)
+        return {"status": "indexed", "vcd_path": rel_vcd, "db_path": rel_db, "stats": stats}
+
+    def index_fsdb_samples_to_sqlite(
+        self,
+        samples: Sequence[Dict[str, Any]],
+        db_path: str,
+        *,
+        scope: str = "top",
+        prune_clocks: bool = True,
+        prune_zero_toggle: bool = True,
+    ) -> Dict[str, Any]:
+        """Normalize extracted FSDB slice samples into a BTTF SQLite waveform index."""
+        dst = self._resolve_project_file(db_path)
+        stats = ingest_fsdb_samples(
+            samples,
+            dst,
+            scope=scope,
+            prune_clocks=bool(prune_clocks),
+            prune_zero_toggle=bool(prune_zero_toggle),
+        )
+        rel_db = dst.relative_to(self.config.project_root).as_posix()
+        self.logger.log("verdi_index_fsdb_samples", db_path=rel_db, **stats)
+        return {"status": "indexed", "db_path": rel_db, "stats": stats}
+
+    def _open_wave_store(self, db_path: str) -> WaveformStore:
+        resolved = self._resolve_project_file(db_path)
+        return WaveformStore(resolved)
+
+    def find_signal_in_scope(
+        self,
+        db_path: str,
+        pattern: str = "*",
+        scope: Optional[str] = None,
+        include_pruned: bool = True,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        store = self._open_wave_store(db_path)
+        matches = store.find_signal_in_scope(
+            pattern=pattern, scope=scope, include_pruned=bool(include_pruned), limit=int(limit)
+        )
+        self.logger.log("verdi_wave_find_signal", db_path=db_path, pattern=pattern, hits=len(matches))
+        return {"db_path": db_path, "pattern": pattern, "scope": scope, "count": len(matches), "signals": matches}
+
+    def get_value_at_time(
+        self, db_path: str, signal_name: str, time: int, scope: Optional[str] = None
+    ) -> Dict[str, Any]:
+        store = self._open_wave_store(db_path)
+        res = store.get_value_at_time(signal_name, int(time), scope=scope)
+        self.logger.log("verdi_wave_value_at_time", db_path=db_path, signal=res["signal"], time=int(time))
+        return res
+
+    def get_first_time_of_value(
+        self,
+        db_path: str,
+        signal_name: str,
+        value: str,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        scope: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        store = self._open_wave_store(db_path)
+        res = store.get_first_time_of_value(
+            signal_name, value, start_time=start_time, end_time=end_time, scope=scope
+        )
+        self.logger.log("verdi_wave_first_time", db_path=db_path, signal=res["signal"], found=res["found"])
+        return res
+
+    def get_signal_toggles(
+        self,
+        db_path: str,
+        signal_name: str,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        scope: Optional[str] = None,
+        limit: int = 200,
+    ) -> Dict[str, Any]:
+        store = self._open_wave_store(db_path)
+        res = store.get_signal_toggles(
+            signal_name, start_time=start_time, end_time=end_time, scope=scope, limit=int(limit)
+        )
+        self.logger.log("verdi_wave_toggles", db_path=db_path, signal=res["signal"], toggles=res["window_toggles"])
+        return res
+
+    def get_scope_toggle_coverage(self, db_path: str, scope: Optional[str] = None) -> Dict[str, Any]:
+        store = self._open_wave_store(db_path)
+        res = store.get_scope_toggle_coverage(scope=scope)
+        self.logger.log("verdi_wave_scope_cov", db_path=db_path, scope=scope)
+        return res
+
+    def backward_trace_window(
+        self,
+        db_path: str,
+        violation_time: int,
+        signals: Sequence[str],
+        window_before: int = 50,
+        scope: Optional[str] = None,
+        limit_per_signal: int = 50,
+    ) -> Dict[str, Any]:
+        store = self._open_wave_store(db_path)
+        res = store.backward_trace_window(
+            int(violation_time),
+            list(signals),
+            window_before=int(window_before),
+            scope=scope,
+            limit_per_signal=int(limit_per_signal),
+        )
+        self.logger.log(
+            "verdi_wave_backward_trace",
+            db_path=db_path,
+            violation_time=int(violation_time),
+            events=len(res["causal_timeline"]),
+        )
+        return res

@@ -139,6 +139,154 @@ def create_dv_mcp_server(
             ),
             read_only=False,
         ))
+        srv.register(ToolSpec(
+            name="index_vcd_to_sqlite",
+            description="Normalize a project-scoped VCD waveform into a pruned BTTF SQLite waves.db (clock + zero-toggle pruning).",
+            input_schema={
+                "type": "object",
+                "required": ["vcd_path"],
+                "properties": {
+                    "vcd_path": {"type": "string"},
+                    "db_path": {"type": "string"},
+                    "prune_clocks": {"type": "boolean", "default": True},
+                    "prune_zero_toggle": {"type": "boolean", "default": True},
+                },
+            },
+            handler=lambda a: verdi.index_vcd_to_sqlite(
+                a["vcd_path"],
+                a.get("db_path"),
+                prune_clocks=a.get("prune_clocks", True),
+                prune_zero_toggle=a.get("prune_zero_toggle", True),
+            ),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="find_signal_in_scope",
+            description="Read-only waveform metadata search by pattern and optional hierarchy scope in waves.db.",
+            input_schema={
+                "type": "object",
+                "required": ["db_path"],
+                "properties": {
+                    "db_path": {"type": "string"},
+                    "pattern": {"type": "string", "default": "*"},
+                    "scope": {"type": "string"},
+                    "include_pruned": {"type": "boolean", "default": True},
+                    "limit": {"type": "integer", "default": 50},
+                },
+            },
+            handler=lambda a: verdi.find_signal_in_scope(
+                a["db_path"],
+                pattern=a.get("pattern", "*"),
+                scope=a.get("scope"),
+                include_pruned=a.get("include_pruned", True),
+                limit=int(a.get("limit", 50)),
+            ),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="get_value_at_time",
+            description="Read-only exact signal value query at or immediately preceding a simulation timestamp in waves.db.",
+            input_schema={
+                "type": "object",
+                "required": ["db_path", "signal_name", "time"],
+                "properties": {
+                    "db_path": {"type": "string"},
+                    "signal_name": {"type": "string"},
+                    "time": {"type": "integer"},
+                    "scope": {"type": "string"},
+                },
+            },
+            handler=lambda a: verdi.get_value_at_time(
+                a["db_path"], a["signal_name"], int(a["time"]), scope=a.get("scope")
+            ),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="get_first_time_of_value",
+            description="Read-only earliest timestamp query when a signal matched a target value in waves.db.",
+            input_schema={
+                "type": "object",
+                "required": ["db_path", "signal_name", "value"],
+                "properties": {
+                    "db_path": {"type": "string"},
+                    "signal_name": {"type": "string"},
+                    "value": {"type": "string"},
+                    "start_time": {"type": "integer"},
+                    "end_time": {"type": "integer"},
+                    "scope": {"type": "string"},
+                },
+            },
+            handler=lambda a: verdi.get_first_time_of_value(
+                a["db_path"],
+                a["signal_name"],
+                a["value"],
+                start_time=a.get("start_time"),
+                end_time=a.get("end_time"),
+                scope=a.get("scope"),
+            ),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="get_signal_toggles",
+            description="Read-only bounded transition history query for a signal in waves.db.",
+            input_schema={
+                "type": "object",
+                "required": ["db_path", "signal_name"],
+                "properties": {
+                    "db_path": {"type": "string"},
+                    "signal_name": {"type": "string"},
+                    "start_time": {"type": "integer"},
+                    "end_time": {"type": "integer"},
+                    "scope": {"type": "string"},
+                    "limit": {"type": "integer", "default": 200},
+                },
+            },
+            handler=lambda a: verdi.get_signal_toggles(
+                a["db_path"],
+                a["signal_name"],
+                start_time=a.get("start_time"),
+                end_time=a.get("end_time"),
+                scope=a.get("scope"),
+                limit=int(a.get("limit", 200)),
+            ),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="get_scope_toggle_coverage",
+            description="Read-only per-scope active vs zero-toggle coverage breakdown from waves.db.",
+            input_schema={
+                "type": "object",
+                "required": ["db_path"],
+                "properties": {"db_path": {"type": "string"}, "scope": {"type": "string"}},
+            },
+            handler=lambda a: verdi.get_scope_toggle_coverage(a["db_path"], scope=a.get("scope")),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="backward_trace_window",
+            description="Read-only causal backward trace (t <= violation_time) over specified signals in waves.db.",
+            input_schema={
+                "type": "object",
+                "required": ["db_path", "violation_time", "signals"],
+                "properties": {
+                    "db_path": {"type": "string"},
+                    "violation_time": {"type": "integer"},
+                    "signals": {"type": "array", "items": {"type": "string"}},
+                    "window_before": {"type": "integer", "default": 50},
+                    "scope": {"type": "string"},
+                    "limit_per_signal": {"type": "integer", "default": 50},
+                },
+            },
+            handler=lambda a: verdi.backward_trace_window(
+                a["db_path"],
+                int(a["violation_time"]),
+                a["signals"],
+                window_before=int(a.get("window_before", 50)),
+                scope=a.get("scope"),
+                limit_per_signal=int(a.get("limit_per_signal", 50)),
+            ),
+            read_only=True,
+        ))
 
     elif profile == "dv-p4":
         p4 = PerforceAdapter(config, approval_gate=gate, logger=logger.child("p4"))

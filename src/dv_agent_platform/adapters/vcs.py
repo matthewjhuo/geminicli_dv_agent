@@ -160,7 +160,7 @@ class VCSAdapter(BaseAdapter):
             }
         res = self._run_command(argv, cwd=cwd)
         self.logger.log("vcs_compile_executed", mock=False, approver=decision.approver, returncode=res.returncode)
-        return {
+        out = {
             "status": "compiled" if res.returncode == 0 and not res.timed_out else "failed",
             "approved_by": decision.approver,
             "build_target": build_target,
@@ -173,6 +173,9 @@ class VCSAdapter(BaseAdapter):
             "stdout": res.stdout,
             "stderr": res.stderr,
         }
+        if res.advisory is not None:
+            out["advisory"] = res.advisory
+        return out
 
     def _build_sim_argv(self, test: str, seed: int, dump_fsdb: bool) -> List[str]:
         acfg = self._adapter_cfg()
@@ -226,7 +229,7 @@ class VCSAdapter(BaseAdapter):
             if target.is_file():
                 log_path = target.relative_to(self.config.project_root).as_posix()
         self.logger.log("vcs_sim_executed", mock=False, approver=decision.approver, returncode=res.returncode)
-        return {
+        out = {
             "status": "executed" if res.returncode == 0 and not res.timed_out else "failed",
             "approved_by": decision.approver,
             "command": cmd,
@@ -239,3 +242,6 @@ class VCSAdapter(BaseAdapter):
             "log_path": log_path,
             "cwd": str(cwd),
         }
+        if res.advisory is not None:
+            out["advisory"] = res.advisory
+        return out

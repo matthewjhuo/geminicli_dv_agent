@@ -22,6 +22,7 @@ simv.daidir/
 *.fsdb
 *.vdb/
 *.vcd
+!fixtures/waveforms/*.vcd
 ucli.key
 vc_hdrs.h
 *.log

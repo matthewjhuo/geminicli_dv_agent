@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from ..config import FrameworkConfig
 from ..errors import AdapterNotValidated, ConfidentialityError, ForbiddenOperation, ConfigError
+from ..memory.statistical import StatisticalToolMemory, classify_eda_error
 from ..security.approval import ApprovalGate, ApprovalRequest
 from ..security.command_guard import classify_command
 from ..security.redact import redact
@@ -43,6 +44,7 @@ class SubprocessResult:
     argv: List[str]
     timed_out: bool = False
     truncated: bool = False
+    advisory: Optional[Dict[str, Any]] = None
 
 
 SubprocessRunner = Callable[
@@ -74,11 +76,14 @@ class BaseAdapter:
         approval_gate: Optional[ApprovalGate] = None,
         logger: Optional[StructuredLogger] = None,
         subprocess_runner: Optional[SubprocessRunner] = None,
+        statistical_memory: Optional[StatisticalToolMemory] = None,
     ):
         self.config = config
         self.approval_gate = approval_gate or ApprovalGate()
         self.logger = logger or StructuredLogger(config.logs_dir / "adapters.jsonl", component=f"adapter.{self.name}")
         self.subprocess_runner = subprocess_runner
+        self.statistical_memory = statistical_memory
+        self._failure_streaks: Dict[tuple[str, str], int] = {}
 
     def _adapter_cfg(self) -> Dict[str, Any]:
         return dict(self.config.adapters.get(self.name) or {})
@@ -241,6 +246,33 @@ class BaseAdapter:
 
         clean_out, trunc_out = _truncate_utf8(redact(raw_res.stdout or ""), eff_max_bytes)
         clean_err, trunc_err = _truncate_utf8(redact(raw_res.stderr or ""), eff_max_bytes)
+        advisory: Optional[Dict[str, Any]] = None
+        if self.statistical_memory is not None:
+            cmd_key = f"{self.name}:{Path(cmd_list[0]).name.lower()}"
+            succeeded = int(raw_res.returncode) == 0 and not bool(raw_res.timed_out)
+            err_class = classify_eda_error(
+                cmd_key, int(raw_res.returncode), clean_out, clean_err, bool(raw_res.timed_out)
+            )
+            streak_key = (cmd_key, err_class)
+            if succeeded:
+                # Record success for any active error streak on this cmd and reset streaks
+                for (ck, ec), prev_cnt in list(self._failure_streaks.items()):
+                    if ck == cmd_key and prev_cnt > 0:
+                        self.statistical_memory.record_retry_outcome(
+                            cmd_key, ec, prev_cnt, True, stage=self.name
+                        )
+                        self._failure_streaks[(ck, ec)] = 0
+                self.statistical_memory.record_retry_outcome(cmd_key, "none", 0, True, stage=self.name)
+            else:
+                retry_num = self._failure_streaks.get(streak_key, 0) + 1
+                self._failure_streaks[streak_key] = retry_num
+                self.statistical_memory.record_retry_outcome(
+                    cmd_key, err_class, retry_num, False, stage=self.name
+                )
+                advisory = self.statistical_memory.advise_on_failure(
+                    cmd_key, err_class, retry_num, stage=self.name
+                )
+
         res = SubprocessResult(
             returncode=int(raw_res.returncode),
             stdout=clean_out,
@@ -248,6 +280,7 @@ class BaseAdapter:
             argv=list(raw_res.argv or cmd_list),
             timed_out=bool(raw_res.timed_out),
             truncated=bool(getattr(raw_res, "truncated", False) or trunc_out or trunc_err),
+            advisory=advisory,
         )
         self.logger.log(
             f"{self.name}_subprocess",
@@ -255,6 +288,7 @@ class BaseAdapter:
             returncode=res.returncode,
             timed_out=res.timed_out,
             truncated=res.truncated,
+            advisory=advisory,
         )
         return res
 

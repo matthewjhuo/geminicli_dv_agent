@@ -11,6 +11,7 @@ from typing import List, Optional
 from .config import FrameworkConfig
 from .errors import DVAgentError
 from .evaluation.harness import EvaluationHarness
+from .evaluation.mutation_oracle import run_mutation_oracle_file
 from .memory.store import MEMORY_KINDS, MemoryStore
 from .orchestrator.backends import GeminiCliBackend
 from .orchestrator.reports import render_run_report
@@ -181,6 +182,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Execute cases against Gemini CLI in read-only plan mode (defaults to dry-run dataset preview)",
     )
+    p_eval.add_argument(
+        "--mutation-ladder",
+        action="store_true",
+        help="Include Survey 5-stage RTL Mutation / Fault-Injection Oracle Evaluation Ladder",
+    )
+    p_eval.add_argument(
+        "--sva-file",
+        default="fixtures/verif/axi_fifo_sva.sv",
+        help="Project-relative SVA file evaluated by --mutation-ladder",
+    )
 
     args, extra = parser.parse_known_args(argv)
     if args.cmd != "memory" and extra:
@@ -221,7 +232,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 allowed = set(args.case)
                 cases = [c for c in cases if c.case_id in allowed]
             if not args.execute:
-                print(json.dumps({
+                payload = {
                     "mode": "dry_run_preview",
                     "dataset": str(ds_path),
                     "total_cases": len(cases),
@@ -236,12 +247,23 @@ def main(argv: Optional[List[str]] = None) -> int:
                         }
                         for c in cases
                     ],
-                }, indent=2, ensure_ascii=False))
+                }
+                if args.mutation_ladder:
+                    sva_path = (cfg.project_root / args.sva_file).resolve()
+                    sva_path.relative_to(cfg.project_root)
+                    payload["evaluation_ladder"] = run_mutation_oracle_file(
+                        sva_path, include_scoreboard_integrity=True
+                    )
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
                 return 0
             harness = EvaluationHarness(
                 cfg,
                 backend_factory=lambda _case: GeminiCliBackend(cwd=str(cfg.project_root), approval_mode="plan"),
             )
+            if args.mutation_ladder:
+                report = harness.evaluate_with_ladder(cases, sva_path=args.sva_file)
+                print(json.dumps(report, indent=2, ensure_ascii=False))
+                return 0 if report["signoff_ready"] else 1
             report = harness.evaluate(cases)
             print(json.dumps(report, indent=2, ensure_ascii=False))
             return 0 if report["passed_cases"] == report["total_cases"] else 1

@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ..config import FrameworkConfig
 from ..orchestrator.backends import AgentBackend
 from ..orchestrator.runner import Orchestrator
+from .mutation_oracle import run_mutation_oracle_file
 
 
 @dataclass
@@ -141,3 +142,27 @@ class EvaluationHarness:
             "avg_execution_time_s": round(sum(r["execution_time_s"] for r in case_reports) / n, 4),
             "cases": case_reports,
         }
+
+    def evaluate_with_ladder(
+        self,
+        cases: List[GoldenCase],
+        *,
+        sva_path: str = "fixtures/verif/axi_fifo_sva.sv",
+        include_scoreboard_integrity: bool = True,
+        min_kill_rate: float = 0.6,
+    ) -> Dict[str, Any]:
+        """Run standard golden case evaluation + Survey 5-stage Mutation Oracle Evaluation Ladder."""
+        base_report = self.evaluate(cases)
+        resolved_sva = (self.config.project_root / sva_path).resolve()
+        resolved_sva.relative_to(self.config.project_root)
+        ladder = run_mutation_oracle_file(
+            resolved_sva,
+            include_scoreboard_integrity=include_scoreboard_integrity,
+            min_kill_rate=min_kill_rate,
+        )
+        base_report["evaluation_ladder"] = ladder
+        base_report["mutation_kill_rate"] = ladder["mutation_kill_rate"]
+        base_report["signoff_ready"] = bool(
+            base_report["passed_cases"] == base_report["total_cases"] and ladder["signoff_ready"]
+        )
+        return base_report

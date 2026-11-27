@@ -1,11 +1,5 @@
-"""Bridge integrating Agentic DV Framework with Google Research Harness^2.
-
-Provides:
-- ``GeminiCliSubstrate``: exposes ``GEMINI.md`` + ``.gemini/skills/*/SKILL.md`` + ``scripts/*.py``
-  as a Harness^2 editable surface while keeping security policies/hooks immutable.
-- ``DVHarness2Adapter``: runs Harness^2 Propose-Probe-Compose against the DV golden dataset
-  and enforces mandatory DV security & portability invariants in ``validate_tree()``.
-- ``DVOfflineProposer``: deterministic local proposer for credential-free verification.
+"""Bridge integrating Agentic DV Framework with Google Research Harness^2,
+extended with GUARD regret-guided evolution guards and WikiSkill persistent ledger.
 """
 
 from .adapter import (
@@ -16,6 +10,16 @@ from .adapter import (
     ensure_harness2_importable,
     validate_dv_harness_safety,
 )
+from .guard_wiki import (
+    WikiPattern,
+    WikiSkillLedger,
+    compute_paired_regret,
+    evaluate_soft_hurt_gate,
+    evaluate_two_layer_checklist,
+    rank_candidate_pool,
+    route_task_signature,
+    validate_guard_scoping,
+)
 
 __all__ = [
     "CORE_DV_SKILLS",
@@ -24,4 +28,12 @@ __all__ = [
     "GeminiCliSubstrate",
     "ensure_harness2_importable",
     "validate_dv_harness_safety",
+    "WikiPattern",
+    "WikiSkillLedger",
+    "compute_paired_regret",
+    "evaluate_soft_hurt_gate",
+    "evaluate_two_layer_checklist",
+    "rank_candidate_pool",
+    "route_task_signature",
+    "validate_guard_scoping",
 ]
