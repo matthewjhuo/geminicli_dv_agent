@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 
 from tests_e2e.e2e_helpers import (
+    cleanup_temporary_directory,
     REPO_ROOT,
     SCRIPTS_DIR,
     dyn_fake_secret,
@@ -65,7 +66,7 @@ class TestE2ER3Harness2(unittest.TestCase):
         self.h2_pkg_root = ensure_harness2_for_test(self.tmp, self.addCleanup)
 
     def tearDown(self) -> None:
-        self._tmp_ctx.cleanup()
+        cleanup_temporary_directory(self._tmp_ctx)
 
     # ------------------------------------------------------------------
     # Tier 1: Nominal / Happy Path (>= 6)

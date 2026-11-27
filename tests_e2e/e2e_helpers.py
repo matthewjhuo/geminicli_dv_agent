@@ -30,6 +30,17 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
+def cleanup_temporary_directory(context):
+    """Clean only the exact test-owned temporary directory, including long Windows paths."""
+    normal = Path(context.name)
+    if sys.platform == "win32" and normal.exists():
+        target = Path("\\\\?\\" + str(normal.resolve()))
+        if not target.samefile(normal):
+            raise ValueError("Unexpected temporary cleanup target")
+        shutil.rmtree(target)
+    context.cleanup()
+
+
 def dyn_win_user_path(username: str = "devuser", suffix: str = "proj") -> str:
     """Dynamically construct a Windows user-dir path without contiguous literal."""
     return "C:" + "\\Us" + "ers\\" + username + "\\" + suffix

@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 
 from tests_e2e.e2e_helpers import (
+    cleanup_temporary_directory,
     HOOKS_DIR,
     POLICIES_DIR,
     REPO_ROOT,
@@ -96,7 +97,7 @@ class TestE2ECrossAndScenarios(unittest.TestCase):
         self.tmp = Path(self._tmp_ctx.name)
 
     def tearDown(self) -> None:
-        self._tmp_ctx.cleanup()
+        cleanup_temporary_directory(self._tmp_ctx)
 
     # ------------------------------------------------------------------
     # Tier 3: Pairwise Cross-Feature Combinations (>= 6)
