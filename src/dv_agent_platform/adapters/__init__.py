@@ -1,6 +1,6 @@
 """Pluggable DV tool & infrastructure adapters (mock-first until environment-validated)."""
 
-from .base import BaseAdapter  # noqa: F401
+from .base import BaseAdapter, SubprocessResult  # noqa: F401
 from .vcs import VCSAdapter  # noqa: F401
 from .verdi import VerdiAdapter  # noqa: F401
 from .perforce import PerforceAdapter  # noqa: F401

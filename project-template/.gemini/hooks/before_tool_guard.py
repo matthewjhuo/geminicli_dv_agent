@@ -36,15 +36,43 @@ FORBIDDEN_PATTERNS = [
 PROTECTED_REL_PREFIXES = (".gemini/policies", ".gemini/hooks")
 
 
+WIN_EXE_PREFIX_RE = re.compile(r'^(?P<q>["\']?)(?P<path>[A-Za-z]:\\[^\n"]*?\.(?:exe|cmd|bat))(?P=q)(?=\s|$)', re.I)
+
+
+def _normalize_exe(tok: str) -> str:
+    norm = tok.replace("\\", "/")
+    if "/" in norm and not norm.startswith("./"):
+        norm = norm.rsplit("/", 1)[-1]
+    low = norm.lower()
+    for ext in (".exe", ".cmd", ".bat"):
+        if low.endswith(ext) and len(norm) > len(ext):
+            norm = norm[: -len(ext)]
+            break
+    if norm.lower() == "p4":
+        return "p4"
+    return norm.lower() if norm.lower() in {"git", "sudo", "su", "doas", "rm", "curl", "wget", "scp", "ssh"} else norm
+
+
 def _tokens(segment: str) -> list[str]:
+    seg = (segment or "").strip()
+    m_win = WIN_EXE_PREFIX_RE.match(seg)
+    if m_win:
+        exe = _normalize_exe(m_win.group("path"))
+        rest = seg[m_win.end():].strip()
+        try:
+            rest_toks = shlex.split(rest, posix=True) if rest else []
+        except ValueError:
+            rest_toks = rest.split()
+        return [exe] + rest_toks
     try:
-        toks = shlex.split(segment, posix=True)
+        toks = shlex.split(seg, posix=False)
     except ValueError:
-        toks = segment.split()
+        toks = seg.split()
+    toks = [t[1:-1] if len(t) >= 2 and t[0] == t[-1] and t[0] in {"'", '"'} else t for t in toks]
     while toks and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0]):
         toks.pop(0)
-    if toks and "/" in toks[0] and not toks[0].startswith("./"):
-        toks[0] = toks[0].rsplit("/", 1)[-1]
+    if toks:
+        toks[0] = _normalize_exe(toks[0])
     return toks
 
 

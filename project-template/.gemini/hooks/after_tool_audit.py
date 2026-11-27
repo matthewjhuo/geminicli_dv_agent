@@ -17,20 +17,26 @@ from pathlib import Path
 SECRET_PATTERNS = [
     re.compile(r"AIza[0-9A-Za-z\-_]{35}"),
     re.compile(r"\bsk-[0-9A-Za-z]{20,}\b"),
-    re.compile(r"(?i)\b((?:api[_-]?key|password|passwd|secret|token|p4passwd)['\"]?\s*[:=]\s*['\"]?)([^\s'\",}]+)"),
+    re.compile(r"\bgh[pousr]_[0-9A-Za-z]{30,}\b"),
+    re.compile(r"\bxox[abpr]-[0-9A-Za-z-]{10,}\b"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
 ]
-SENSITIVE_KEY_RE = re.compile(r"(?i)(password|passwd|secret|api[_-]?key|^token$|auth|credential|p4passwd)")
+KV_SECRET_RE = re.compile(
+    r"(?i)\b((?:[a-z0-9]+[_-])*(?:api[_-]?key|auth[_-]?key|password|passwd|secret|token|p4passwd|credential)['\"]?\s*[:=]\s*['\"]?)([^\s'\",}]+)"
+)
+SENSITIVE_KEY_RE = re.compile(r"(?i)(password|passwd|secret|api[_-]?key|auth[_-]?key|^token$|auth|credential|p4passwd)")
 
 INJECTION_RE = re.compile(
-    r"(?i)(\bignore\b[^\n]{0,40}\binstructions?\b|\bp4\s+(?:submit|obliterate)\b|\bpre-?approved\b)"
+    r"(?i)(\bignore\b[^\n]{0,40}\binstructions?\b|\bp4\s+(?:submit|obliterate)\b|\bpre-?approved\b|</?\s*untrusted_dv_data\b)"
 )
 
 
 def _redact(text: str) -> str:
     out = text or ""
-    out = SECRET_PATTERNS[0].sub("[REDACTED]", out)
-    out = SECRET_PATTERNS[1].sub("[REDACTED]", out)
-    out = SECRET_PATTERNS[2].sub(r"\1[REDACTED]", out)
+    for pat in SECRET_PATTERNS:
+        out = pat.sub("[REDACTED]", out)
+    out = KV_SECRET_RE.sub(r"\1[REDACTED]", out)
     return out
 
 

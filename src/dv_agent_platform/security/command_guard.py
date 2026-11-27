@@ -72,15 +72,43 @@ def split_segments(command: str) -> List[str]:
     return [s.strip() for s in _SPLIT_RE.split(command or "") if s and s.strip()]
 
 
+_WIN_EXE_PREFIX_RE = re.compile(r'^(?P<q>["\']?)(?P<path>[A-Za-z]:\\[^\n"]*?\.(?:exe|cmd|bat))(?P=q)(?=\s|$)', re.I)
+
+
+def _normalize_exe(tok: str) -> str:
+    norm = tok.replace("\\", "/")
+    if "/" in norm and not norm.startswith("./"):
+        norm = norm.rsplit("/", 1)[-1]
+    low = norm.lower()
+    for ext in (".exe", ".cmd", ".bat"):
+        if low.endswith(ext) and len(norm) > len(ext):
+            norm = norm[: -len(ext)]
+            break
+    if norm.lower() == "p4":
+        return "p4"
+    return norm.lower() if norm.lower() in {"git", "sudo", "su", "doas", "rm", "curl", "wget", "scp", "ssh"} else norm
+
+
 def _tokens(segment: str) -> List[str]:
+    seg = (segment or "").strip()
+    m_win = _WIN_EXE_PREFIX_RE.match(seg)
+    if m_win:
+        exe = _normalize_exe(m_win.group("path"))
+        rest = seg[m_win.end():].strip()
+        try:
+            rest_toks = shlex.split(rest, posix=True) if rest else []
+        except ValueError:
+            rest_toks = rest.split()
+        return [exe] + rest_toks
     try:
-        tokens = shlex.split(segment, posix=True)
+        tokens = shlex.split(seg, posix=False)
     except ValueError:
-        tokens = segment.split()
+        tokens = seg.split()
+    tokens = [t[1:-1] if len(t) >= 2 and t[0] == t[-1] and t[0] in {"'", '"'} else t for t in tokens]
     while tokens and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[0]):
         tokens.pop(0)
-    if tokens and "/" in tokens[0] and not tokens[0].startswith("./"):
-        tokens[0] = tokens[0].rsplit("/", 1)[-1]
+    if tokens:
+        tokens[0] = _normalize_exe(tokens[0])
     return tokens
 
 

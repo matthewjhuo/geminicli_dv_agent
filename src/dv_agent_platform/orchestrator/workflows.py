@@ -73,6 +73,32 @@ BUILTIN_WORKFLOWS: Dict[str, Dict[str, Any]] = {
              "objective": "Confirm sign-off readiness verdict is evidence-backed."},
         ],
     },
+    "ral-audit": {
+        "description": "Register (CSR) & UVM RAL architecture, predictor, access policy, and HW/SW race audit.",
+        "tasks": [
+            {"id": "spec", "agent": "dv-spec",
+             "objective": "Extract CSR/register map rules, access policies, and reset domains for {target}."},
+            {"id": "ral", "agent": "dv-uvm", "depends_on": ["spec"],
+             "objective": "Mode=review. Audit UVM RAL adapter, explicit predictor (auto_predict=0), and custom CSR test coverage for {target}."},
+            {"id": "sva", "agent": "dv-sva", "depends_on": ["spec"],
+             "objective": "Audit W1C/lock/HW-SW race assertions for CSRs in {target}."},
+            {"id": "aggregate", "kind": "aggregate", "depends_on": ["ral", "sva"]},
+            {"id": "review", "kind": "review", "agent": "dv-review", "depends_on": ["aggregate"],
+             "objective": "Verify CSR audit claims against cited SystemRDL/RAL/RTL evidence."},
+        ],
+    },
+    "rtl-trace": {
+        "description": "Cycle-level RTL signal/FSM trace with Perforce history correlation and independent review.",
+        "tasks": [
+            {"id": "rtl", "agent": "dv-rtl",
+             "objective": "Trace RTL logic, signal drivers/loads, reset/clock conditions, and read-only Perforce history for {target} under {rtl_root}."},
+            {"id": "sva", "agent": "dv-sva", "depends_on": ["rtl"],
+             "objective": "Check whether existing or proposed bind assertions cover the traced RTL behavior of {target}."},
+            {"id": "aggregate", "kind": "aggregate", "depends_on": ["rtl", "sva"]},
+            {"id": "review", "kind": "review", "agent": "dv-review", "depends_on": ["aggregate"],
+             "objective": "Verify RTL trace line citations and epistemic labels independently."},
+        ],
+    },
 }
 
 

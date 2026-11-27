@@ -98,3 +98,4 @@ dv-agent-framework/
 - [安裝指南 (`docs/INSTALLATION_GUIDE.md`)](./docs/INSTALLATION_GUIDE.md)
 - [遷移與真實工具鏈接軌指南 (`docs/MIGRATION_GUIDE.md`)](./docs/MIGRATION_GUIDE.md)
 - [完整驗證報告 (`docs/VALIDATION_REPORT.md`)](./docs/VALIDATION_REPORT.md)
+- [R3 Harness² 實戰演化報告 (`docs/R3_HARNESS2_EVOLUTION_REPORT.md`)](./docs/R3_HARNESS2_EVOLUTION_REPORT.md)

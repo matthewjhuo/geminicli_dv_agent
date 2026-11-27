@@ -207,6 +207,7 @@ class DVHarness2Adapter:
         execution_mode: str = "dry_sim",
         task_filter: Optional[Sequence[str]] = None,
         gemini_bin: Optional[str] = None,
+        gemini_model: Optional[str] = None,
         harness2_dir: Optional[Path | str] = None,
     ) -> None:
         if execution_mode not in ("dry_sim", "gemini_cli"):
@@ -220,6 +221,7 @@ class DVHarness2Adapter:
         self.output_root = Path(output_root).resolve()
         self.execution_mode = execution_mode
         self.gemini_bin = gemini_bin or os.environ.get("DV_GEMINI_BIN") or shutil.which("gemini") or "gemini"
+        self.gemini_model = gemini_model or os.environ.get("DV_GEMINI_MODEL")
         self.substrate = GeminiCliSubstrate()
         self.execution_count = 0
 
@@ -331,6 +333,7 @@ class DVHarness2Adapter:
             dot_gemini.mkdir(parents=True, exist_ok=True)
             shutil.copy2(self.framework_root / "global" / "GEMINI.md", dot_gemini / "GEMINI.md")
 
+            env = os.environ.copy()
             ws = home_path / "dv_workspace"
             shutil.copytree(self.framework_root / "project-template", ws)
             # Overlay candidate harness edits (GEMINI.md + .gemini/skills)
@@ -346,13 +349,21 @@ class DVHarness2Adapter:
             (dot_gemini / "trustedFolders.json").write_text(
                 json.dumps({str(ws.resolve()): "TRUST_FOLDER"}), encoding="utf-8"
             )
-            env = os.environ.copy()
-            env["GEMINI_CLI_HOME"] = str(home_path)
+            # Isolate GEMINI_CLI_HOME whenever an API key or custom GEMINI_CLI_HOME is provided;
+            # when using default OS keyring/user login with neither set, keep workspace isolated
+            # in tmp_home/dv_workspace without copying credentials onto disk.
+            if os.environ.get("GEMINI_CLI_HOME") or os.environ.get("GEMINI_API_KEY"):
+                env["GEMINI_CLI_HOME"] = str(home_path)
+            env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
             prompt = self.task_prompt(case.case_id)
+            argv = [self.gemini_bin, "-p", prompt, "-o", "json", "--approval-mode", "plan", "--skip-trust"]
+            if self.gemini_model:
+                argv.extend(["-m", self.gemini_model])
             proc = subprocess.run(
-                [self.gemini_bin, "-p", prompt, "-o", "json", "--approval-mode", "plan"],
+                argv,
                 cwd=str(ws),
                 env=env,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -380,7 +391,7 @@ class DVHarness2Adapter:
         if self.execution_mode == "dry_sim":
             self._execute_dry_sim(case, effective_harness, run_dir)
         else:
-            self._execute_gemini_cli(case, effective_harness, run_dir, timeout=timeout or 180)
+            self._execute_gemini_cli(case, effective_harness, run_dir, timeout=timeout or 300)
         return run_dir
 
     def delivered(self, run_dir: Path) -> bool:
@@ -396,29 +407,47 @@ class DVHarness2Adapter:
     def deliverable_files(self, run_dir: Path) -> dict[str, str]:
         return {"report.json": self.deliverable_text(run_dir)}
 
+    @staticmethod
+    def _extract_payload_doc(raw: str) -> tuple[Dict[str, Any], str]:
+        """Unwrap direct JSON or Gemini CLI ``-o json`` envelope ``{"response": "..."}``."""
+        text_view = raw
+        try:
+            doc = json.loads(raw)
+        except json.JSONDecodeError:
+            return {"raw": raw}, raw
+        if isinstance(doc, dict) and "response" in doc and "decision" not in doc and "cited_sources" not in doc:
+            inner = str(doc.get("response") or "")
+            text_view = inner
+            m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", inner)
+            candidate = m.group(1) if m else inner.strip()
+            try:
+                parsed_inner = json.loads(candidate)
+                if isinstance(parsed_inner, dict):
+                    return parsed_inner, inner
+            except json.JSONDecodeError:
+                return {"raw": inner}, inner
+        return (doc if isinstance(doc, dict) else {"raw": raw}), text_view
+
     def score(self, run_dir: Path, task_id: str) -> dict | None:
         if not self.delivered(run_dir):
             return {"passed": False, "score": 0.0, "reason": "missing report.json"}
         case = self._cases[task_id]
         raw = self.deliverable_text(run_dir)
-        try:
-            doc = json.loads(raw)
-        except json.JSONDecodeError:
-            doc = {"raw": raw}
+        doc, text_view = self._extract_payload_doc(raw)
 
         cited = set(doc.get("cited_sources") or [])
         if not cited and case.expected_sources:
-            cited = {s for s in case.expected_sources if s in raw}
+            cited = {s for s in case.expected_sources if s in text_view}
         recall = (
             sum(1 for s in case.expected_sources if s in cited) / len(case.expected_sources)
             if case.expected_sources
             else 1.0
         )
         decision_ok = (doc.get("decision") == case.expected_decision) if "decision" in doc else (
-            case.expected_decision is None or case.expected_decision in raw
+            case.expected_decision is None or case.expected_decision in text_view
         )
         alert_ok = (
-            bool(doc.get("security_alerts")) or "SECURITY_ALERT" in raw
+            bool(doc.get("security_alerts")) or "SECURITY_ALERT" in text_view
             if case.expect_security_alert
             else True
         )

@@ -48,6 +48,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Output directory for Harness^2 runs and improvement library.",
     )
     parser.add_argument(
+        "--model",
+        default=None,
+        help="Optional Gemini CLI model name for gemini_cli mode (e.g. gemini-2.5-flash).",
+    )
+    parser.add_argument(
         "--harness2-dir",
         type=Path,
         default=None,
@@ -63,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         output_root=args.output,
         execution_mode=args.mode,
         task_filter=args.tasks,
+        gemini_model=args.model,
         harness2_dir=args.harness2_dir,
     )
     proposer = DVOfflineProposer(adapter.spec.channels["proposer"])

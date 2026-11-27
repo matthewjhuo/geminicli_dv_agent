@@ -16,7 +16,7 @@ _PATTERNS = [
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
 ]
 _KV = re.compile(
-    r"(?i)\b((?:[a-z0-9]+[_-])?(?:password|passwd|secret|api[_-]?key|token|p4passwd|credential))(\s*[:=]\s*)(['\"]?)([^\s'\"]{6,})(\3)"
+    r"(?i)\b((?:[a-z0-9]+[_-])*(?:password|passwd|secret|(?:api|auth|access|private)[_-]?key|token|p4passwd|credential))(\s*[:=]\s*)(['\"]?)([^\s'\"]{6,})(\3)"
 )
 _SENSITIVE_KEY = re.compile(r"(?i)(password|passwd|secret|api[_-]?key|^token$|auth|credential|p4passwd)")
 

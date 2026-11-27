@@ -44,6 +44,17 @@ def create_dv_mcp_server(
             read_only=True,
         ))
         srv.register(ToolSpec(
+            name="parse_compile_log",
+            description="Read-only extraction of VCS compile errors and warnings.",
+            input_schema={
+                "type": "object",
+                "required": ["log_path"],
+                "properties": {"log_path": {"type": "string"}},
+            },
+            handler=lambda a: vcs.parse_compile_log(a["log_path"]),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
             name="run_simulation",
             description="Approval-gated VCS single-seed simulation launch (dry-run by default unless approved).",
             input_schema={
@@ -121,6 +132,31 @@ def create_dv_mcp_server(
             description="Read-only Perforce changelist summary.",
             input_schema={"type": "object", "required": ["changelist"], "properties": {"changelist": {"type": "integer"}}},
             handler=lambda a: p4.describe(int(a["changelist"])),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="diff",
+            description="Read-only Perforce workspace diff.",
+            input_schema={"type": "object", "properties": {"files": {"type": "array", "items": {"type": "string"}}}},
+            handler=lambda a: p4.diff(a.get("files") or []),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="filelog",
+            description="Read-only Perforce file revision history.",
+            input_schema={
+                "type": "object",
+                "required": ["path"],
+                "properties": {"path": {"type": "string"}, "limit": {"type": "integer", "default": 10}},
+            },
+            handler=lambda a: p4.filelog(a["path"], int(a.get("limit", 10))),
+            read_only=True,
+        ))
+        srv.register(ToolSpec(
+            name="annotate",
+            description="Read-only Perforce line-by-line blame/annotate.",
+            input_schema={"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}}},
+            handler=lambda a: p4.annotate(a["path"]),
             read_only=True,
         ))
         srv.register(ToolSpec(
