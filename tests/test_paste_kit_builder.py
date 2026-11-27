@@ -37,8 +37,8 @@ class PasteKitBuilder(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / "kit"
             info = builder.build("HEAD", output, harness2_from_kit=ROOT / "offline/paste-kit-7ff1213")
-            stage = Path(temp) / "restore"
-            stage.mkdir()
+            stage = Path(temp) / ".dv_agent" / "restore"
+            stage.mkdir(parents=True)
             for index in range(1, info["parts"]+1):
                 text = (output / f"{index:02d}_PART_{index:03d}.txt").read_text(encoding="utf-8")
                 marker = f"DV_PAYLOAD_PART_{index:03d}"
@@ -50,6 +50,13 @@ class PasteKitBuilder(unittest.TestCase):
             second = subprocess.run([sys.executable, str(output / "restore.py")], cwd=stage, capture_output=True, text=True)
             self.assertNotEqual(second.returncode, 0)
             self.assertIn("already exists", second.stderr)
+            import os
+            restored = stage / f"agentic-dv-offline-{info['commit'][:7]}" / "dv-agent-framework"
+            if sys.platform == "win32":
+                restored = Path("\\\\?\\" + str(restored.resolve()))
+            env = {**os.environ, "PYTHONPATH": str(restored / "src"), "DV_TEST_LIVE_GEMINI": "0", "PYTHONUTF8": "1"}
+            scanned = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_level1_scaffold.py", "-q"], cwd=restored, env=env, capture_output=True, text=True)
+            self.assertEqual(scanned.returncode, 0, scanned.stderr)
             if sys.platform == "win32":
                 extended = Path("\\\\?\\" + str(stage.resolve()))
                 self.assertTrue(extended.samefile(stage))
