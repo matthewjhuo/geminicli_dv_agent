@@ -50,11 +50,15 @@ def read_kit(directory):
     return info, files
 
 
-RESTORE = r'''import base64, gzip, hashlib, io, json, tempfile, zipfile
+RESTORE = r'''import base64, gzip, hashlib, io, json, os, tempfile, zipfile
 from pathlib import Path, PurePosixPath
 PARTS = @PARTS@
 EXPECTED = @DIGEST@
-destination = Path.cwd() / @DESTINATION@
+base = Path.cwd().resolve()
+if os.name == "nt" and not str(base).startswith("\\\\?\\"):
+    raw = str(base)
+    base = Path("\\\\?\\UNC\\" + raw[2:] if raw.startswith("\\\\") else "\\\\?\\" + raw)
+destination = base / @DESTINATION@
 pieces = []
 for index in range(1, PARTS + 1):
     path = Path(f"part_{index:03d}.b64")
@@ -85,7 +89,7 @@ with zipfile.ZipFile(io.BytesIO(gzip.decompress(data))) as archive:
     for name, expected in manifest["files"].items():
         if hashlib.sha256(archive.read(name)).hexdigest() != expected:
             raise SystemExit(f"File checksum mismatch: {name}")
-    with tempfile.TemporaryDirectory(prefix=".dv-restore-", dir=Path.cwd()) as temp:
+    with tempfile.TemporaryDirectory(prefix=".dv-restore-", dir=base) as temp:
         staging = Path(temp) / "content"
         staging.mkdir()
         for name in names:

@@ -30,6 +30,31 @@ class PasteKitBuilder(unittest.TestCase):
             for index in range(1, info["parts"] + 1):
                 self.assertIn((output / f"{index:02d}_PART_{index:03d}.txt").read_text(encoding="utf-8"), script)
 
+    def test_restore_script_executes_and_refuses_existing_destination(self):
+        if not (ROOT / ".git").exists():
+            self.skipTest("Packaging developer test requires git metadata")
+        import sys, shutil
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "kit"
+            info = builder.build("HEAD", output, harness2_from_kit=ROOT / "offline/paste-kit-7ff1213")
+            stage = Path(temp) / "restore"
+            stage.mkdir()
+            for index in range(1, info["parts"]+1):
+                text = (output / f"{index:02d}_PART_{index:03d}.txt").read_text(encoding="utf-8")
+                marker = f"DV_PAYLOAD_PART_{index:03d}"
+                body = text.split(f"<<'{marker}'\n", 1)[1].split(f"\n{marker}", 1)[0]
+                (stage / f"part_{index:03d}.b64").write_text(body, encoding="ascii")
+            first = subprocess.run([sys.executable, str(output / "restore.py")], cwd=stage, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertIn("RESTORE OK", first.stdout)
+            second = subprocess.run([sys.executable, str(output / "restore.py")], cwd=stage, capture_output=True, text=True)
+            self.assertNotEqual(second.returncode, 0)
+            self.assertIn("already exists", second.stderr)
+            if sys.platform == "win32":
+                extended = Path("\\\\?\\" + str(stage.resolve()))
+                self.assertTrue(extended.samefile(stage))
+                shutil.rmtree(extended)
+
     def test_corrupted_input_kit_and_invalid_chunk_size_fail(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

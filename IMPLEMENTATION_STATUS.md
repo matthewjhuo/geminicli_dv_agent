@@ -12,11 +12,11 @@ Baseline: main 3dcc9f5. Branch: codex/framework-correctness. Existing TB and com
 - Artifact-backed memory integrity checks, true read-only frozen mode, project/entry/action/expiry-scoped external approval required for confirmation. Human labels alone are insufficient.
 - Statistical memory wired by default; zero-exit UVM errors are failure observations; frozen statistics stay read-only.
 - Candidate safety/scoping enforced before execution, two-layer scoring, default mastered-rule pinning and score validation. Windows extended-length Harness2 output paths and cleanup verified.
-- One canonical committed-snapshot paste-kit builder; legacy CLI delegates to it.
+- One canonical committed-snapshot paste-kit builder; legacy CLI delegates to it. Restore supports Windows extended paths and refuses overwrite; added a real restore subprocess test.
 
 ## Actual local validation
 
-Python 3.13.5 on Windows. Unit suite: 119 tests, 118 passed, 1 skipped (live Gemini); this includes native Harness2 recursive execution using the SHA-256-verified bundled core. Without optional core discovery: 117 passed, 2 skipped. E2E: 74 passed. Custom correctness regressions: 24 passed. Native Harness2 dry_sim: 4 golden cases done, 0 failed; no model or EDA calls. Native recursive test: 2 cases across agg/seq, passed.
+Python 3.13.5 on Windows. Unit suite before final restore test: 119 tests, 118 passed, 1 skipped (live Gemini); this includes native Harness2 recursive execution using the SHA-256-verified bundled core. Without optional core discovery: 117 passed, 2 skipped. E2E: 74 passed. Custom correctness regressions: 24 passed. Native Harness2 dry_sim: 4 golden cases done, 0 failed; no model or EDA calls. Native recursive test: 2 cases across agg/seq, passed.
 
 Commands: PYTHONPATH=src, PYTHONUTF8=1; python -m unittest discover -s tests -q; python -m unittest discover -s tests_e2e -q. For optional bundled core set HARNESS2_REPO_DIR to its restored root. scripts/run_harness2_dv.py --mode dry_sim --k 1 --recursion both --output .dv_agent/h2-check.
 
