@@ -13,7 +13,7 @@ agent 只有 ok 才算成功；needs_input、blocked、failed 會阻擋下游。
 - SQLite REAL 是浮點時間；極大時間戳或極高精度需另接精確 tick 表示，不能宣稱任意精度。
 - 只有明確具名 clock 才可能在啟用 prune_clocks 時剪除，不再依資料翻轉頻率猜 clock。需要 clock 邊緣時請 prune_clocks=false。
 - 常數保留 first_time，首次觀測前回傳未知。相同時間的值查詢採最後輸入事件。值在搜尋窗開始已成立時可回傳 start_time。
-- 匯入先寫同目錄暫存 DB，檢查 VCD 來源未變，再原子發布；預設拒絕覆寫，Python API 明確 overwrite=True 才可取代。MCP 不開放覆寫。
+- 匯入先寫同目錄暫存 DB，檢查 VCD 來源未變，再原子發布；預設拒絕覆寫，Python API 明確 overwrite=True 才可取代。MCP 不開放覆寫；adapter/MCP 索引寫入僅限 state_dir/waveforms 下的 .db，不能建立 RTL/TB 檔案。
 - index_vcd_to_sqlite 標為寫入工具；它只索引本地資料，不會啟動 EDA。查詢工具維持唯讀。
 - 活動率是「非 clock 訊號至少有一次 transition 的比例」，不代表 EDA bit toggle coverage。刪除無依據的 100% preservation 宣告。
 - backward_trace_window 只回傳事件時間窗；causal_timeline 保留為舊欄位別名，新增 event_timeline 與限制說明，不提供因果證明。

@@ -7,7 +7,7 @@ Baseline: main 3dcc9f5. Branch: codex/framework-correctness. Existing TB and com
 - Integrated execution-integrity fixes: fail-closed task/reviewer completion, downstream invalidation on revise, persisted resume settings/usage, atomic estimated budget admission, current-content evidence verification and resilient MCP errors.
 - Real ADO/JIRA explicitly unsupported rather than fabricated success.
 - Waveform URI encoding, fractional ns, first-observed times, deterministic same-time ordering and held-value window matching; conservative named-clock pruning; explicit activity/causality limitations; atomic no-clobber publication and source-change detection; VCD multi-token lines and malformed-token rejection; literal scope matching.
-- Waveform indexing declared as a write tool; MCP rejects bool/nonfinite numeric times.
+- Waveform indexing declared as a write tool and confined to managed state_dir/waveforms/*.db; MCP rejects bool/nonfinite numeric times.
 - Synthetic mutation evaluation strips comments and never grants EDA signoff; synthetic_ready is separate.
 - Artifact-backed memory integrity checks, true read-only frozen mode, project/entry/action/expiry-scoped external approval required for confirmation. Human labels alone are insufficient.
 - Statistical memory wired by default; zero-exit UVM errors are failure observations; frozen statistics stay read-only.
@@ -16,7 +16,7 @@ Baseline: main 3dcc9f5. Branch: codex/framework-correctness. Existing TB and com
 
 ## Actual local validation
 
-Python 3.13.5 on Windows. Unit suite: 120 tests, 119 passed, 1 skipped (live Gemini); this includes native Harness2 recursive execution using the SHA-256-verified bundled core. Without optional core discovery: 118 passed, 2 skipped. E2E: 74 passed. Custom correctness regressions: 24 passed. Native Harness2 dry_sim: 4 golden cases done, 0 failed; no model or EDA calls. Native recursive test: 2 cases across agg/seq, passed.
+Python 3.13.5 on Windows. Unit suite: 121 tests, 120 passed, 1 skipped (live Gemini); this includes native Harness2 recursive execution using the SHA-256-verified bundled core. Without optional core discovery: 119 passed, 2 skipped. E2E: 74 passed. Custom correctness regressions: 25 passed. Native Harness2 dry_sim: 4 golden cases done, 0 failed; no model or EDA calls. Native recursive test: 2 cases across agg/seq, passed.
 
 Commands: PYTHONPATH=src, PYTHONUTF8=1; python -m unittest discover -s tests -q; python -m unittest discover -s tests_e2e -q. For optional bundled core set HARNESS2_REPO_DIR to its restored root. scripts/run_harness2_dv.py --mode dry_sim --k 1 --recursion both --output .dv_agent/h2-check.
 

@@ -134,6 +134,21 @@ class CorrectnessRegressions(unittest.TestCase):
         self.assertTrue(server.handle_message(msg)['result']['isError'])
         self.assertEqual(server.handle_message({'jsonrpc': '2.0', 'id': 2, 'method': 'ping'})['result'], {})
 
+    def test_waveform_index_write_stays_in_managed_directory(self):
+        from dv_agent_platform.adapters import VerdiAdapter
+        cfg = FrameworkConfig.load(project_root=self.root, env={})
+        adapter = VerdiAdapter(cfg)
+        src = ROOT / "fixtures/waveforms/axi_fifo_fail.vcd"
+        local = self.root / "input.vcd"; local.write_bytes(src.read_bytes())
+        for target in ["new_tb.sv", "other.db", ".dv_agent/waveforms/new_tb.sv"]:
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                adapter.index_vcd_to_sqlite("input.vcd", target)
+            self.assertFalse((self.root / target).exists())
+        result = adapter.index_vcd_to_sqlite("input.vcd", ".dv_agent/waveforms/new.db")
+        self.assertEqual(result["status"], "indexed")
+        with self.assertRaises(FileExistsError):
+            adapter.index_vcd_to_sqlite("input.vcd", ".dv_agent/waveforms/new.db")
+
     def test_comment_only_sva_cannot_pass(self):
         report = run_mutation_oracle_ladder('// module dummy\n// A: assert property ((m_valid && !m_ready) |=> (m_valid && $stable(m_data)));\n// endmodule')
         self.assertFalse(report['stages']['1_syntax_and_structure']['passed'])

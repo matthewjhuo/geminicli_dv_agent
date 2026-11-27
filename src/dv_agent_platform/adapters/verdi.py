@@ -131,6 +131,18 @@ class VerdiAdapter(BaseAdapter):
             "stderr": res.stderr,
         }
 
+    def _wave_db_destination(self, db_path: str) -> Path:
+        target = self._resolve_project_file(db_path)
+        managed = (self.config.state_dir / "waveforms").resolve()
+        managed.relative_to(self.config.project_root)
+        try:
+            target.relative_to(managed)
+        except ValueError as exc:
+            raise ValueError("Waveform indexes may only be written under state_dir/waveforms") from exc
+        if target.suffix.lower() != ".db":
+            raise ValueError("Waveform index destination must end in .db")
+        return target
+
     def index_vcd_to_sqlite(
         self,
         vcd_path: str,
@@ -142,7 +154,7 @@ class VerdiAdapter(BaseAdapter):
         """Build a BTTF SQLite waveform index (``waves.db``) from a project-scoped VCD file."""
         src = self._resolve_project_file(vcd_path)
         if db_path:
-            dst = self._resolve_project_file(db_path)
+            dst = self._wave_db_destination(db_path)
         else:
             dst = (self.config.state_dir / "waveforms" / f"{src.stem}.waves.db").resolve()
             dst.relative_to(self.config.project_root)
@@ -167,7 +179,7 @@ class VerdiAdapter(BaseAdapter):
         prune_zero_toggle: bool = True,
     ) -> Dict[str, Any]:
         """Normalize extracted FSDB slice samples into a BTTF SQLite waveform index."""
-        dst = self._resolve_project_file(db_path)
+        dst = self._wave_db_destination(db_path)
         stats = ingest_fsdb_samples(
             samples,
             dst,
