@@ -19,7 +19,19 @@ from .errors import ConfigError
 HARD_MAX_CONCURRENCY = 4
 CONFIG_FILENAME = "dv_project.json"
 _SECRET_KEY_RE = re.compile(
-    r"(?i)^(.*[_-])?(password|passwd|secret|api[_-]?key|credential|auth[_-]?token|access[_-]?token|private[_-]?key)$"
+    r"(?i)^(.*[_-])?(password|passwd|p4passwd|secret|api[_-]?key|credential|"
+    r"(?:auth|access|refresh|oauth|bearer)[_-]?token|private[_-]?key)$|^token$"
+)
+_SECRET_VALUE_RES = (
+    re.compile(r"AIza[0-9A-Za-z\-_]{35}"),
+    re.compile(r"\bsk-[0-9A-Za-z]{20,}\b"),
+    re.compile(r"\bgh[pousr]_[0-9A-Za-z]{30,}\b"),
+    re.compile(r"\bxox[abpr]-[0-9A-Za-z-]{10,}\b"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(
+        r"(?i)\b(?:api[_-]?key|password|passwd|p4passwd|secret|token)\s*[:=]\s*['\"](?!env:)[^'\"<$\s]{8,}['\"]"
+    ),
 )
 _PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
@@ -49,16 +61,30 @@ def _reject_secrets(obj: Any, path: str = "") -> None:
     if isinstance(obj, dict):
         for key, val in obj.items():
             here = f"{path}.{key}" if path else str(key)
-            if isinstance(val, str) and val and _SECRET_KEY_RE.match(str(key)):
-                if not (val.startswith("$") or val.startswith("env:")):
+            if isinstance(val, str) and val and not (val.startswith("$") or val.startswith("env:")):
+                if _SECRET_KEY_RE.match(str(key)):
                     raise ConfigError(
                         f"Credential-like key '{here}' found in config. Store only the NAME of an "
                         "environment variable (e.g. 'env:JIRA_API_TOKEN'), never the secret itself."
                     )
+                for pat in _SECRET_VALUE_RES:
+                    if pat.search(val):
+                        raise ConfigError(
+                            f"Potential embedded secret value at '{here}' in config. "
+                            "Store only environment variable references (e.g. 'env:VAR_NAME')."
+                        )
             _reject_secrets(val, here)
     elif isinstance(obj, list):
         for i, item in enumerate(obj):
             _reject_secrets(item, f"{path}[{i}]")
+    elif isinstance(obj, str) and obj and not (obj.startswith("$") or obj.startswith("env:")):
+        for pat in _SECRET_VALUE_RES:
+            if pat.search(obj):
+                where = path or "<value>"
+                raise ConfigError(
+                    f"Potential embedded secret value at '{where}' in config. "
+                    "Store only environment variable references (e.g. 'env:VAR_NAME')."
+                )
 
 
 @dataclass
@@ -80,6 +106,8 @@ class FrameworkConfig:
         default_factory=lambda: {"input_per_1m_usd": 0.0, "output_per_1m_usd": 0.0}
     )
     conflict_margin: float = 0.25
+    testbench: Dict[str, Any] = field(default_factory=dict)
+    adapters: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.project_root = Path(self.project_root).resolve()
@@ -101,6 +129,14 @@ class FrameworkConfig:
             raise ConfigError("adapter_mode must be 'mock' or 'real'")
         if not 0.0 <= self.conflict_margin < 1.0:
             raise ConfigError("conflict_margin must be within [0, 1)")
+        if not isinstance(self.testbench, dict):
+            raise ConfigError("testbench must be a mapping/dict")
+        if not isinstance(self.adapters, dict) or any(
+            not isinstance(v, dict) for v in self.adapters.values()
+        ):
+            raise ConfigError("adapters must be a mapping of adapter_name -> dict")
+        _reject_secrets(self.testbench, "testbench")
+        _reject_secrets(self.adapters, "adapters")
 
     @property
     def runs_dir(self) -> Path:
@@ -150,6 +186,7 @@ class FrameworkConfig:
                 except ValueError as exc:
                     raise ConfigError(f"Invalid value for {env_key}") from exc
         data.update(dict(overrides or {}))
+        _reject_secrets(data)
 
         project_id = data.pop("project_id", None) or re.sub(r"[^A-Za-z0-9._-]", "_", root.name)
         state_dir = Path(data.pop("state_dir", None) or (root / ".dv_agent"))
@@ -172,4 +209,24 @@ class FrameworkConfig:
             state_dir=state_dir,
             fixtures_dir=fixtures_path,
             **data,
+        )
+
+    @classmethod
+    def from_file(
+        cls,
+        config_file: os.PathLike | str,
+        project_root: Optional[os.PathLike | str] = None,
+        env: Optional[Mapping[str, str]] = None,
+        overrides: Optional[Mapping[str, Any]] = None,
+    ) -> "FrameworkConfig":
+        cfg_path = Path(config_file)
+        if not cfg_path.is_file():
+            raise ConfigError(f"Config file not found: {cfg_path}")
+        env_map = dict(os.environ if env is None else env)
+        root = project_root or env_map.get("DV_PROJECT_ROOT") or cfg_path.resolve().parent
+        return cls.load(
+            project_root=root,
+            config_file=cfg_path,
+            env=env_map,
+            overrides=overrides,
         )

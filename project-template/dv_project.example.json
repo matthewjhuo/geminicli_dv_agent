@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to <project_root>/dv_project.json to customize. Never embed credentials.",
+  "_comment": "Copy to ${DV_PROJECT_ROOT}/dv_project.json to customize. Store only env: references for credentials.",
   "project_id": "example_soc_ip",
   "max_concurrency": 2,
   "token_budget": 200000,
@@ -20,5 +20,76 @@
   "pricing": {
     "input_per_1m_usd": 1.25,
     "output_per_1m_usd": 5.0
+  },
+  "testbench": {
+    "dut_name": "axi_fifo_subsys",
+    "docs_spec_dir": "${DV_PROJECT_ROOT}/docs/specs",
+    "rtl_root": "${DV_PROJECT_ROOT}/rtl",
+    "tb_root": "${DV_PROJECT_ROOT}/verif/tb",
+    "uvm_env_root": "${DV_PROJECT_ROOT}/verif/uvm",
+    "sva_root": "${DV_PROJECT_ROOT}/verif/sva",
+    "c_model_root": "${DV_PROJECT_ROOT}/verif/c_dpi",
+    "formal_root": "${DV_PROJECT_ROOT}/verif/formal",
+    "sim_out_dir": "${DV_PROJECT_ROOT}/sim_out",
+    "filelist": "${DV_PROJECT_ROOT}/rtl/filelist.f",
+    "python_bin": "python3",
+    "clocks": [
+      {
+        "name": "clk_sys",
+        "freq": "500 MHz",
+        "reset": "rst_sys_n"
+      }
+    ],
+    "resets": [
+      {
+        "name": "rst_sys_n",
+        "polarity": "active_low"
+      }
+    ],
+    "interfaces": [
+      {
+        "name": "m_axi_if",
+        "protocol": "AXI4",
+        "direction": "Initiator",
+        "agent": "axi_master_agent",
+        "clock_reset": "clk_sys / rst_sys_n"
+      }
+    ],
+    "compile_cmd": "make -C \"${DV_PROJECT_ROOT}/verif/sim\" comp TEST=${TEST}",
+    "sim_cmd": "make -C \"${DV_PROJECT_ROOT}/verif/sim\" run TEST=${TEST} SEED=${SEED} DUMP_FSDB=${DUMP_FSDB}",
+    "regression_cmd": "make -C \"${DV_PROJECT_ROOT}/verif/sim\" regress SUITE=${SUITE}",
+    "verdi_cmd": "verdi -dbdir \"${SIM_OUT_DIR}/simv.daidir\" -ssf \"${SIM_OUT_DIR}/${TEST}_${SEED}/waves.fsdb\""
+  },
+  "adapters": {
+    "vcs": {
+      "bin": "vcs",
+      "compile_cmd": "vcs -full64 -sverilog -ntb_opts uvm-1.2 -f ${DV_PROJECT_ROOT}/rtl/filelist.f",
+      "sim_cmd": "${DV_PROJECT_ROOT}/sim_out/simv",
+      "scheduler_prefix": [],
+      "timeout_s": 300,
+      "max_output_bytes": 65536,
+      "default_flags": ["-timescale=1ns/1ps"]
+    },
+    "verdi": {
+      "bin": "verdi",
+      "fsdbreport_bin": "fsdbreport",
+      "timeout_s": 120,
+      "max_output_bytes": 65536
+    },
+    "perforce": {
+      "bin": "p4",
+      "p4_port_env": "env:P4PORT",
+      "p4_client_env": "env:P4CLIENT",
+      "p4passwd_env": "env:P4PASSWD",
+      "timeout_s": 60
+    },
+    "jira": {
+      "base_url_env": "env:JIRA_BASE_URL",
+      "token_env": "env:JIRA_API_TOKEN"
+    },
+    "ado": {
+      "org_url_env": "env:ADO_ORG_URL",
+      "pat_env": "env:ADO_PAT"
+    }
   }
 }

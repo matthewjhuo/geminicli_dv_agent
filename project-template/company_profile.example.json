@@ -1,0 +1,127 @@
+{
+  "_comment": "Company Testbench Customization Profile (non-secret; safe to parameterize via $DV_PROJECT_ROOT and env: refs).",
+  "profile_version": "1.0",
+  "project": {
+    "project_id": "soc_axi_dma",
+    "dut_name": "axi_dma_engine",
+    "design_owner": "rtl_dma_team",
+    "dv_lead": "dv_soc_team",
+    "ado_project_key": "SOC_DV",
+    "ado_req_prefix": "REQ-DMA",
+    "jira_project_key": "DVBUG",
+    "adapter_mode": "mock",
+    "dry_run": true,
+    "allow_external_upload": false,
+    "max_concurrency": 2,
+    "token_budget": 200000,
+    "task_timeout_s": 600,
+    "max_retries": 1,
+    "max_review_rounds": 2,
+    "adapters_validated": {
+      "vcs": false,
+      "verdi": false,
+      "perforce": false,
+      "regression": false,
+      "ado": false,
+      "jira": false
+    },
+    "pricing": {
+      "input_per_1m_usd": 1.25,
+      "output_per_1m_usd": 5.0
+    }
+  },
+  "paths": {
+    "docs_spec_dir": "docs/specs",
+    "rtl_root": "rtl",
+    "tb_root": "verif/tb",
+    "uvm_env_root": "verif/uvm",
+    "sva_root": "verif/sva",
+    "c_model_root": "verif/c_dpi",
+    "formal_root": "verif/formal",
+    "sim_out_dir": "sim_out",
+    "filelist": "rtl/axi_dma.f"
+  },
+  "testbench": {
+    "dut_name": "axi_dma_engine",
+    "methodology": "SystemVerilog (IEEE 1800-2017), UVM 1.2, SVA, DPI-C, Formal",
+    "eda_stack": "Synopsys VCS, Synopsys Verdi, Perforce (p4), SOC_DV/DVBUG",
+    "mas_spec": "axi_dma_mas.md",
+    "reg_spec": "axi_dma_regs.rdl",
+    "testplan": "axi_dma_testplan.md",
+    "interfaces": [
+      {
+        "name": "m_axi_if",
+        "protocol": "AXI4 128-bit",
+        "direction": "Initiator",
+        "agent": "axi_master_agent",
+        "clock_reset": "clk_sys / rst_sys_n"
+      },
+      {
+        "name": "s_apb_if",
+        "protocol": "APB4 32-bit",
+        "direction": "Target (CSR)",
+        "agent": "apb_reg_agent",
+        "clock_reset": "clk_csr / rst_csr_n"
+      }
+    ],
+    "clocks": [
+      {
+        "name": "clk_sys",
+        "freq": "500 MHz +/- 100 ppm",
+        "jitter": "Asynchronous to clk_csr",
+        "reset": "rst_sys_n",
+        "reset_polarity": "Active-low, async assert / sync deassert"
+      },
+      {
+        "name": "clk_csr",
+        "freq": "100 MHz",
+        "jitter": "Independent",
+        "reset": "rst_csr_n",
+        "reset_polarity": "Active-low, async assert / sync deassert"
+      }
+    ],
+    "resets": [
+      {
+        "name": "rst_sys_n",
+        "polarity": "Active-low, async assert / sync deassert"
+      },
+      {
+        "name": "rst_csr_n",
+        "polarity": "Active-low, async assert / sync deassert"
+      }
+    ],
+    "compile_cmd": "make -C \"${DV_PROJECT_ROOT}/verif/sim\" comp TEST=${TEST}",
+    "sim_cmd": "make -C \"${DV_PROJECT_ROOT}/verif/sim\" run TEST=${TEST} SEED=${SEED} DUMP_FSDB=${DUMP_FSDB}",
+    "regression_cmd": "make -C \"${DV_PROJECT_ROOT}/verif/sim\" regress SUITE=${SUITE}",
+    "urg_cmd": "urg -dir \"${SIM_OUT_DIR}/cov.vdb\" -format text -report \"${SIM_OUT_DIR}/urgReport\"",
+    "verdi_cmd": "verdi -dbdir \"${SIM_OUT_DIR}/simv.daidir\" -ssf \"${SIM_OUT_DIR}/${TEST}_${SEED}/waves.fsdb\""
+  },
+  "adapters": {
+    "vcs": {
+      "bin": "vcs",
+      "compile_cmd": "vcs -full64 -sverilog -ntb_opts uvm-1.2 -f ${DV_PROJECT_ROOT}/rtl/axi_dma.f",
+      "sim_cmd": "${DV_PROJECT_ROOT}/sim_out/simv",
+      "scheduler_prefix": [],
+      "timeout_s": 300,
+      "max_output_bytes": 65536,
+      "default_flags": ["-timescale=1ns/1ps"]
+    },
+    "verdi": {
+      "bin": "verdi",
+      "fsdbreport_bin": "fsdbreport",
+      "timeout_s": 120,
+      "max_output_bytes": 65536
+    },
+    "perforce": {
+      "bin": "p4",
+      "p4_port_env": "env:P4PORT",
+      "p4_client_env": "env:P4CLIENT",
+      "p4passwd_env": "env:P4PASSWD",
+      "timeout_s": 60
+    }
+  },
+  "runtime": {
+    "python_bin": "python3",
+    "dv_agent_platform_pythonpath": "$DV_AGENT_PLATFORM_PYTHONPATH"
+  }
+}
