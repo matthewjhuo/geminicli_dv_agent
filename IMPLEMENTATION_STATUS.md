@@ -26,4 +26,4 @@ No live Gemini/company EDA, scheduler or ticket API validation. SQLite REAL is f
 
 ## Next action
 
-Build and independently restore the corrected committed snapshot; run restored suites and demo, publish a reviewable branch/PR, and check remote CI. Company installation remains preview-only until a real TB/profile is supplied.
+Corrected snapshot 6137a8a: 193 files / 12 parts, archived with per-file SHA-256. Actual restore refused repeated overwrite. Restored unit/E2E/native dry_sim validation is recorded in docs/RELEASE_VALIDATION.md. Publish the reviewable branch/PR and inspect CI. Company installation remains preview-only until a real TB/profile is supplied.

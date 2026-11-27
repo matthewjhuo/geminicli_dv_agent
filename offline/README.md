@@ -5,6 +5,8 @@
 
 | 快照 | 狀態 |
 | --- | --- |
+| [6137a8a](paste-kit-6137a8a/README.md) | 最新修正版；193 檔、12 段，完成還原後測試 |
+| [7ff1213](paste-kit-7ff1213/README.md) | 歷史版；未含本次正確性修正，請使用新版 |
 | [d8b0c90](paste-kit-d8b0c90/README.md) | 歷史版；尚未包含執行完整性改進 |
 
 完整功能含 Harness² 請用 Python 3.12/3.13，沿用公司已核准的 Gemini CLI。

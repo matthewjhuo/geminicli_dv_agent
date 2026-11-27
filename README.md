@@ -60,7 +60,7 @@ dv-agent-framework/
 
 ## 快速開始（Linux + VS Code Terminal）
 
-**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[完整貼上式部署包（`7ff1213` 歷史版；本次修正請見 offline/README.md）](offline/paste-kit-7ff1213/README.md)：提供單檔與 11 段文字版本，包含完整框架（含 BTTF 波形 SQLite、ChipMEM 雙層記憶、GUARD+WikiSkill 演化護欄、Survey Mutation Oracle 評測階梯）與 Harness² 核心，附逐檔 SHA-256 校驗、離線測試與 Gemini CLI 專案安裝步驟。
+**公司 server 只能複製貼上、不能連 GitHub 或傳檔？** 使用[修正版完整貼上式部署包（`6137a8a`）](offline/paste-kit-6137a8a/README.md)：193 個來源檔案、12 段文字，包含完整框架與 Harness² 核心，附逐檔 SHA-256、離線測試與 Gemini CLI 專案安裝步驟。歷史快照未包含本次全部修正；先閱讀[相容性與限制](docs/CORRECTNESS_REMEDIATION.md)。
 
 1. **預覽安裝（預設 Dry-Run，不修改任何檔案）**：
    ```bash
